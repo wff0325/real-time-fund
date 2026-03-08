@@ -1559,9 +1559,12 @@ export default function HomePage() {
 
   const applyViewMode = useCallback((mode) => {
     if (mode !== 'card' && mode !== 'list') return;
+    if (mode !== viewMode) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     setViewMode(mode);
     storageHelper.setItem('viewMode', mode);
-  }, [storageHelper]);
+  }, [storageHelper, viewMode]);
 
   const toggleFavorite = (code) => {
     setFavorites(prev => {

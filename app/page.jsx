@@ -16,7 +16,30 @@ import Announcement from "./components/Announcement";
 import { Stat } from "./components/Common";
 import FundTrendChart from "./components/FundTrendChart";
 import FundIntradayChart from "./components/FundIntradayChart";
-import { ChevronIcon, CloseIcon, ExitIcon, EyeIcon, EyeOffIcon, GridIcon, ListIcon, LoginIcon, LogoutIcon, MoonIcon, PinIcon, PinOffIcon, PlusIcon, RefreshIcon, SettingsIcon, SortIcon, StarIcon, SunIcon, TrashIcon, UpdateIcon, UserIcon, CameraIcon } from "./components/Icons";
+import {
+  ChevronIcon,
+  CloseIcon,
+  ExitIcon,
+  EyeIcon,
+  EyeOffIcon,
+  GridIcon,
+  ListIcon,
+  LoginIcon,
+  LogoutIcon,
+  MoonIcon,
+  PinIcon,
+  PinOffIcon,
+  PlusIcon,
+  SettingsIcon,
+  SortIcon,
+  StarIcon,
+  SunIcon,
+  TrashIcon,
+  UpdateIcon,
+  UserIcon,
+  CameraIcon,
+  SwitchIcon
+} from "./components/Icons";
 import AddFundToGroupModal from "./components/AddFundToGroupModal";
 import AddResultModal from "./components/AddResultModal";
 import CloudConfigModal from "./components/CloudConfigModal";
@@ -273,7 +296,7 @@ function GroupSummary({ funds, holdings, groupName, getProfit, stickyTop }) {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div className="muted" style={{ fontSize: '12px', marginBottom: 4 }}>持有收益{showPercent ? '(%)' : ''}</div>
+            <div className="muted" style={{ fontSize: '12px', marginBottom: 4, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>持有收益{showPercent ? '(%)' : ''} <SwitchIcon style={{ opacity: 0.4 }} /></div>
             <div
               className={summary.totalHoldingReturn > 0 ? 'up' : summary.totalHoldingReturn < 0 ? 'down' : ''}
               style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', cursor: 'pointer' }}
@@ -4433,7 +4456,7 @@ export default function HomePage() {
                                             style={{ cursor: 'pointer', flexDirection: 'column', gap: 4 }}
                                             title="点击切换金额/百分比"
                                           >
-                                            <span className="label">持有收益{percentModes[f.code] ? '(%)' : ''}</span>
+                                            <span className="label" style={{display: 'flex', alignItems: 'center', gap: 1}}>持有收益{percentModes[f.code] ? '(%)' : ''}<SwitchIcon/></span>
                                             <span className={`value ${profit.profitTotal > 0 ? 'up' : profit.profitTotal < 0 ? 'down' : ''}`}>
                                               {profit.profitTotal > 0 ? '+' : profit.profitTotal < 0 ? '-' : ''}
                                               {percentModes[f.code]

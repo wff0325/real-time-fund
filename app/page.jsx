@@ -622,8 +622,34 @@ export default function HomePage() {
 
       return filtered.sort((a, b) => {
         if (sortBy === 'yield') {
-          const valA = isNumber(a.estGszzl) ? a.estGszzl : (a.gszzl ?? a.zzl ?? 0);
-          const valB = isNumber(b.estGszzl) ? b.estGszzl : (b.gszzl ?? a.zzl ?? 0);
+          const getYieldValue = (fund) => {
+            // 与 estimateChangePercent 展示逻辑对齐：
+            // - noValuation 为 true 一律视为无“估值涨幅”
+            // - 有估值覆盖时用 estGszzl
+            // - 否则仅在 gszzl 为数字时使用 gszzl
+            if (fund.noValuation) {
+              return { value: 0, hasValue: false };
+            }
+            if (fund.estPricedCoverage > 0.05) {
+              if (isNumber(fund.estGszzl)) {
+                return { value: fund.estGszzl, hasValue: true };
+              }
+              return { value: 0, hasValue: false };
+            }
+            if (isNumber(fund.gszzl)) {
+              return { value: Number(fund.gszzl), hasValue: true };
+            }
+            return { value: 0, hasValue: false };
+          };
+
+          const { value: valA, hasValue: hasA } = getYieldValue(a);
+          const { value: valB, hasValue: hasB } = getYieldValue(b);
+
+          // 无“估值涨幅”展示值（界面为 `—`）的基金统一排在最后
+          if (!hasA && !hasB) return 0;
+          if (!hasA) return 1;
+          if (!hasB) return -1;
+
           return sortOrder === 'asc' ? valA - valB : valB - valA;
         }
         if (sortBy === 'holding') {

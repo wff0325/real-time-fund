@@ -235,7 +235,7 @@ export default function FundCard({
               }
             />
             <Stat
-              label="估值涨幅"
+              label="估算涨幅"
               value={
                 f.estPricedCoverage > 0.05
                   ? `${f.estGszzl > 0 ? '+' : ''}${f.estGszzl.toFixed(2)}%`

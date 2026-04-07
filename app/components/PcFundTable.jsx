@@ -66,7 +66,7 @@ const COLUMN_HEADERS = {
   latestNav: '最新净值',
   estimateNav: '估算净值',
   yesterdayChangePercent: '最新涨幅',
-  estimateChangePercent: '估值涨幅',
+  estimateChangePercent: '估算涨幅',
   totalChangePercent: '估算收益',
   holdingAmount: '持仓金额',
   holdingDays: '持有天数',
@@ -133,7 +133,7 @@ function SortableRow({ row, children, isTableDragging, disabled }) {
  *     latestNav: string|number;     // 最新净值
  *     estimateNav: string|number;   // 估算净值
  *     yesterdayChangePercent: string|number; // 最新涨幅
- *     estimateChangePercent: string|number;  // 估值涨幅
+ *     estimateChangePercent: string|number;  // 估算涨幅
  *     holdingAmount: string|number;         // 持仓金额
  *     todayProfit: string|number;           // 当日收益
  *     holdingProfit: string|number;         // 持有收益
@@ -1085,7 +1085,7 @@ export default function PcFundTable({
       },
       {
         accessorKey: 'estimateChangePercent',
-        header: '估值涨幅',
+        header: '估算涨幅',
         size: 135,
         minSize: 100,
         cell: (info) => {

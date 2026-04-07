@@ -58,7 +58,7 @@ const MOBILE_COLUMN_HEADERS = {
   latestNav: '最新净值',
   estimateNav: '估算净值',
   yesterdayChangePercent: '最新涨幅',
-  estimateChangePercent: '估值涨幅',
+  estimateChangePercent: '估算涨幅',
   totalChangePercent: '估算收益',
   holdingDays: '持有天数',
   todayProfit: '当日收益',
@@ -1273,7 +1273,7 @@ export default function MobileFundTable({
       },
       {
         accessorKey: 'estimateChangePercent',
-        header: '估值涨幅',
+        header: '估算涨幅',
         cell: (info) => {
           const original = info.row.original || {};
           const value = original.estimateChangeValue;

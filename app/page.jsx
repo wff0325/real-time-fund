@@ -278,7 +278,7 @@ export default function HomePage() {
   const DEFAULT_SORT_RULES = [
     { id: 'default', label: '默认', enabled: true },
     // 估值涨幅为原始名称，"涨跌幅"为别名
-    { id: 'yield', label: '估值涨幅', alias: '涨跌幅', enabled: true },
+    { id: 'yield', label: '估算涨幅', alias: '涨跌幅', enabled: true },
     // 最新涨幅排序：默认隐藏
     { id: 'yesterdayIncrease', label: '最新涨幅', enabled: false },
     // 持仓金额排序：默认隐藏
@@ -764,7 +764,7 @@ export default function HomePage() {
 
       if (canCalcTodayProfit) {
         const amount = holding.share * currentNav;
-        // 估值涨幅
+        // 估算涨幅
         const gzChange = fund.estPricedCoverage > 0.05 ? fund.estGszzl : (Number(fund.gszzl) || 0);
         profitToday = amount - (amount / (1 + gzChange / 100));
       } else {
@@ -877,7 +877,7 @@ export default function HomePage() {
         if (sortBy === 'yield') {
           const getYieldValue = (fund) => {
             // 与 estimateChangePercent 展示逻辑对齐：
-            // - noValuation 为 true 一律视为无“估值涨幅”
+            // - noValuation 为 true 一律视为无“估算涨幅”
             // - 有估值覆盖时用 estGszzl
             // - 否则仅在 gszzl 为数字时使用 gszzl
             if (fund.noValuation) {
@@ -898,7 +898,7 @@ export default function HomePage() {
           const { value: valA, hasValue: hasA } = getYieldValue(a);
           const { value: valB, hasValue: hasB } = getYieldValue(b);
 
-          // 无“估值涨幅”展示值（界面为 `—`）的基金统一排在最后
+          // 无“估算涨幅”展示值（界面为 `—`）的基金统一排在最后
           if (!hasA && !hasB) return 0;
           if (!hasA) return 1;
           if (!hasB) return -1;

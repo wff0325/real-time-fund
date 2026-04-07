@@ -1374,7 +1374,7 @@ input[type="number"] {
   min-width: 900px;
 }
 
-/* 基金名称 净值 涨跌幅 估值涨幅 估值时间 持仓金额 当日收益 持有收益（三列同宽） */
+/* 基金名称 净值 涨跌幅 估算涨幅 估值时间 持仓金额 当日收益 持有收益（三列同宽） */
 .table-header-row-scroll,
 .table-row-scroll {
   display: grid;

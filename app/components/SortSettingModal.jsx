@@ -224,7 +224,7 @@ export default function SortSettingModal({
           className="muted"
           style={{ fontSize: 12, margin: 0, color: "var(--muted-foreground)" }}
         >
-          可拖拽调整优先级，右侧开关控制是否启用该排序规则。点击规则名称可编辑别名（例如“估值涨幅”的别名为“涨跌幅”）。
+          可拖拽调整优先级，右侧开关控制是否启用该排序规则。点击规则名称可编辑别名（例如“估算涨幅”的别名为“涨跌幅”）。
         </p>
       </div>
 

@@ -730,6 +730,7 @@ export default function PcFundTable({
     const hasDca = original.hasDca;
     const isFavorites = favorites?.has?.(code);
     const rowContext = useContext(SortableRowContext);
+    const showFavoriteButton = !isGroupTab && (currentTab === 'all' || currentTab === 'fav' || !currentTab);
 
     return (
       <div className="name-cell-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
@@ -774,7 +775,7 @@ export default function PcFundTable({
             <DragIcon width="16" height="16" />
           </button>
         )}
-        {!isGroupTab && !batchRemoveEnabled ? (
+        {showFavoriteButton ? (
           <button
             className={`icon-button fav-button ${isFavorites ? 'active' : ''}`}
             onClick={(e) => {

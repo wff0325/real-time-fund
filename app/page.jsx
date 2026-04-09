@@ -570,9 +570,10 @@ export default function HomePage() {
   const [isTradingDay, setIsTradingDay] = useState(true); // 默认为交易日，通过接口校正
   const tabsRef = useRef(null);
   const [fundDeleteConfirm, setFundDeleteConfirm] = useState(null); // { code, name }
-  const [fundDeleteBulkConfirm, setFundDeleteBulkConfirm] = useState(null); // { codes: string[], groupId: string, count: number }
+  const [fundDeleteBulkConfirm, setFundDeleteBulkConfirm] = useState(null); // { codes: string[], count: number, groupId?: string, scope?: 'group' | 'global' }
   const fundDetailDrawerCloseRef = useRef(null); // 由 MobileFundTable 注入，用于确认删除时关闭基金详情 Drawer
   const fundDetailDialogCloseRef = useRef(null); // 由 PcFundTable 注入，用于确认删除时关闭基金详情 Dialog
+  const pcBatchClearSelectionRef = useRef(null); // 由 PcFundTable 注入，批量删除二次确认成功后清空表格多选
 
   const todayStr = formatDate();
 
@@ -3751,34 +3752,59 @@ export default function HomePage() {
     }
   };
 
+  /** @returns {boolean|void} false 表示已弹出二次确认，由确认成功回调再清空选中；true 表示已立即执行，调用方可清空多选 */
   const requestRemoveFundsFromCurrentGroup = (codes) => {
     const gid =
       currentTab !== 'all' && currentTab !== 'fav' && groups.some((g) => g.id === currentTab)
         ? currentTab
         : null;
     const list = Array.from(new Set((codes || []).filter(Boolean)));
-    if (!gid || list.length === 0) return;
+    if (list.length === 0) return true;
 
-    const scoped = migrateDcaPlansToScoped(dcaPlans);
-    const needsConfirm = list.some((code) => {
-      const gh = groupHoldings[gid]?.[code];
-      const hasGroupHolding = gh && isNumber(gh.share) && gh.share > 0;
-      const hasGroupPending = pendingTrades.some((t) => t.fundCode === code && t.groupId === gid);
-      const hasGroupDca = !!(scoped[gid]?.[code]);
-      const txList = transactions[code] || [];
-      const hasGroupTx = txList.some((t) => t.groupId === gid);
-      return hasGroupHolding || hasGroupPending || hasGroupDca || hasGroupTx;
+    if (gid) {
+      const scoped = migrateDcaPlansToScoped(dcaPlans);
+      const needsConfirm = list.some((code) => {
+        const gh = groupHoldings[gid]?.[code];
+        const hasGroupHolding = gh && isNumber(gh.share) && gh.share > 0;
+        const hasGroupPending = pendingTrades.some((t) => t.fundCode === code && t.groupId === gid);
+        const hasGroupDca = !!(scoped[gid]?.[code]);
+        const txList = transactions[code] || [];
+        const hasGroupTx = txList.some((t) => t.groupId === gid);
+        return hasGroupHolding || hasGroupPending || hasGroupDca || hasGroupTx;
+      });
+
+      if (needsConfirm) {
+        setFundDeleteBulkConfirm({ codes: list, groupId: gid, count: list.length, scope: 'group' });
+        return false;
+      }
+
+      fundDetailDrawerCloseRef.current?.();
+      fundDetailDialogCloseRef.current?.();
+      stripManyFundsFromGroupScope(list, gid);
+      showToast(`已从当前分组移除 ${list.length} 支基金`, 'success');
+      return true;
+    }
+
+    // 全部 / 自选：与单条删除、移动端批量删除作用域一致
+    const needsGlobalConfirm = list.some((code) => {
+      const h = holdings[code];
+      const hasGlobalHolding = h && isNumber(h.share) && h.share > 0;
+      const hasGroupHolding = Object.values(groupHoldings || {}).some(
+        (b) => b && b[code] && isNumber(b[code].share) && b[code].share > 0
+      );
+      return hasGlobalHolding || hasGroupHolding;
     });
 
-    if (needsConfirm) {
-      setFundDeleteBulkConfirm({ codes: list, groupId: gid, count: list.length });
-      return;
+    if (needsGlobalConfirm) {
+      setFundDeleteBulkConfirm({ codes: list, count: list.length, scope: 'global' });
+      return false;
     }
 
     fundDetailDrawerCloseRef.current?.();
     fundDetailDialogCloseRef.current?.();
-    stripManyFundsFromGroupScope(list, gid);
-    showToast(`已从当前分组移除 ${list.length} 支基金`, 'success');
+    removeFundsBulk(list);
+    showToast(`已删除 ${list.length} 支基金`, 'success');
+    return true;
   };
 
   const addFund = async (e) => {
@@ -6042,6 +6068,7 @@ export default function HomePage() {
                                   requestRemoveFund({ code: row.code, name: row.fundName });
                                 }}
                                 onRemoveFunds={(codes) => requestRemoveFundsFromCurrentGroup(codes)}
+                                batchSelectionClearRef={pcBatchClearSelectionRef}
                                 onToggleFavorite={(row) => {
                                   if (!row || !row.code) return;
                                   toggleFavorite(row.code);
@@ -6327,13 +6354,23 @@ export default function HomePage() {
         {fundDeleteBulkConfirm && (
           <ConfirmModal
             title="批量删除确认"
-            message={`确定从当前分组中移除已选的 ${fundDeleteBulkConfirm.count} 支基金吗？将清除这些基金在该分组内的持仓、待定交易、定投计划与分组内交易记录；不会在「全部」中删除这些基金。`}
+            message={
+              fundDeleteBulkConfirm.scope === 'global'
+                ? `确定删除已选的 ${fundDeleteBulkConfirm.count} 支基金吗？将从列表中移除这些基金及其全部持仓与相关数据。`
+                : `确定从当前分组中移除已选的 ${fundDeleteBulkConfirm.count} 支基金吗？将清除这些基金在该分组内的持仓、待定交易、定投计划与分组内交易记录；不会在「全部」中删除这些基金。`
+            }
             confirmText="确定删除"
             onConfirm={() => {
               fundDetailDrawerCloseRef.current?.();
               fundDetailDialogCloseRef.current?.();
-              stripManyFundsFromGroupScope(fundDeleteBulkConfirm.codes, fundDeleteBulkConfirm.groupId);
-              showToast(`已从当前分组移除 ${fundDeleteBulkConfirm.count} 支基金`, 'success');
+              if (fundDeleteBulkConfirm.scope === 'global') {
+                removeFundsBulk(fundDeleteBulkConfirm.codes);
+                showToast(`已删除 ${fundDeleteBulkConfirm.count} 支基金`, 'success');
+              } else {
+                stripManyFundsFromGroupScope(fundDeleteBulkConfirm.codes, fundDeleteBulkConfirm.groupId);
+                showToast(`已从当前分组移除 ${fundDeleteBulkConfirm.count} 支基金`, 'success');
+              }
+              pcBatchClearSelectionRef.current?.();
               setFundDeleteBulkConfirm(null);
             }}
             onCancel={() => setFundDeleteBulkConfirm(null)}

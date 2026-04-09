@@ -146,6 +146,8 @@ function SortableRow({ row, children, isTableDragging, disabled }) {
  * @param {boolean} [props.refreshing] - 是否处于刷新状态（控制删除按钮禁用态）
  * @param {(row: any) => Object} [props.getFundCardProps] - 给定行返回 FundCard 的 props；传入后点击基金名称将用弹框展示卡片详情
  * @param {React.MutableRefObject<(() => void) | null>} [props.closeDialogRef] - 注入关闭弹框的方法，用于确认删除时关闭
+ * @param {React.MutableRefObject<(() => void) | null>} [props.batchSelectionClearRef] - 注入清空批量选中状态的方法，用于父级批量删除二次确认成功后调用
+ * @param {(codes: string[]) => boolean|void} [props.onRemoveFunds] - 批量删除；返回 false 表示已弹出二次确认，勿清空选中
  * @param {boolean} [props.blockDialogClose] - 为 true 时阻止点击遮罩关闭弹框（如删除确认弹框打开时）
  * @param {number} [props.stickyTop] - 表头固定时的 top 偏移（与 MobileFundTable 一致，用于适配导航栏、筛选栏等）
  * @param {boolean} [props.masked] - 是否隐藏持仓相关金额
@@ -166,6 +168,7 @@ export default function PcFundTable({
   onCustomSettingsChange,
   getFundCardProps,
   closeDialogRef,
+  batchSelectionClearRef,
   blockDialogClose = false,
   stickyTop = 0,
   masked = false,
@@ -239,6 +242,14 @@ export default function PcFundTable({
       return changed ? next : prev;
     });
   }, [selectableCodes]);
+
+  useEffect(() => {
+    if (!batchSelectionClearRef) return undefined;
+    batchSelectionClearRef.current = () => setSelectedCodes(new Set());
+    return () => {
+      batchSelectionClearRef.current = null;
+    };
+  }, [batchSelectionClearRef]);
 
   const toggleSelected = useCallback((code, checked) => {
     if (!code) return;
@@ -820,8 +831,8 @@ export default function PcFundTable({
               onRemove={() => {
                 if (!onRemoveFunds || selectedCount === 0) return;
                 const codes = Array.from(selectedCodes);
-                onRemoveFunds(codes);
-                setSelectedCodes(new Set());
+                const shouldClear = onRemoveFunds(codes);
+                if (shouldClear !== false) setSelectedCodes(new Set());
               }}
               disabled={refreshing || selectedCount === 0}
             />

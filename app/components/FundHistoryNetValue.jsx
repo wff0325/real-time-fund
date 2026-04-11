@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import { fetchFundHistory } from '../api/fund';
-import { cachedRequest } from '../lib/cacheRequest';
+import * as qk from '../lib/query-keys';
 import FundHistoryNetValueModal from './FundHistoryNetValueModal';
 
 /**
@@ -61,37 +62,20 @@ const columns = [
 ];
 
 export default function FundHistoryNetValue({ code, range = '1m', theme }) {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (!code) {
-      setData([]);
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    setError(null);
-    const cacheKey = `fund_history_${code}_${range}`;
-    cachedRequest(() => fetchFundHistory(code, range), cacheKey, { cacheTime: 10 * 60 * 1000 })
-      .then((res) => {
-        if (active) {
-          setData(buildRows(res || []));
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err);
-          setData([]);
-          setLoading(false);
-        }
-      });
-    return () => { active = false; };
-  }, [code, range]);
+  const {
+    data: historyRaw,
+    isPending: loading,
+    isError,
+  } = useQuery({
+    queryKey: qk.fundHistory(code, range),
+    queryFn: () => fetchFundHistory(code, range),
+    enabled: Boolean(code),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const data = useMemo(() => buildRows(historyRaw || []), [historyRaw]);
 
   const table = useReactTable({
     data,
@@ -109,11 +93,11 @@ export default function FundHistoryNetValue({ code, range = '1m', theme }) {
       </div>
     );
   }
-  if (error || data.length === 0) {
+  if (isError || data.length === 0) {
     return (
       <div className="fund-history-net-value" style={{ padding: '12px 0' }}>
         <span className="muted" style={{ fontSize: '13px' }}>
-          {error ? '加载失败' : '暂无历史净值'}
+          {isError ? '加载失败' : '暂无历史净值'}
         </span>
       </div>
     );

@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import { fetchFundHistory } from '../api/fund';
-import { cachedRequest } from '../lib/cacheRequest';
+import * as qk from '../lib/query-keys';
 import { CloseIcon } from './Icons';
 import {
   Dialog,
@@ -70,9 +71,6 @@ const columns = [
 ];
 
 export default function FundHistoryNetValueModal({ open, onOpenChange, code, theme }) {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [visibleCount, setVisibleCount] = useState(30);
   const [isMobile, setIsMobile] = useState(false);
   const scrollRef = useRef(null);
@@ -87,30 +85,22 @@ export default function FundHistoryNetValueModal({ open, onOpenChange, code, the
   }, []);
 
   useEffect(() => {
-    if (!open || !code) return;
-    let active = true;
-    setLoading(true);
-    setError(null);
+    if (!open) return;
     setVisibleCount(30);
-
-    const cacheKey = `fund_history_${code}_all_modal`;
-    cachedRequest(() => fetchFundHistory(code, 'all'), cacheKey, { cacheTime: 10 * 60 * 1000 })
-      .then((res) => {
-        if (!active) return;
-        setData(buildRows(res || []));
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (!active) return;
-        setError(err);
-        setData([]);
-        setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
   }, [open, code]);
+
+  const {
+    data: historyRaw,
+    isPending: loading,
+    isError,
+  } = useQuery({
+    queryKey: qk.fundHistory(code, 'all'),
+    queryFn: () => fetchFundHistory(code, 'all'),
+    enabled: open && Boolean(code),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const data = useMemo(() => buildRows(historyRaw || []), [historyRaw]);
 
   const table = useReactTable({
     data,
@@ -171,10 +161,10 @@ export default function FundHistoryNetValueModal({ open, onOpenChange, code, the
           <span className="muted" style={{ fontSize: 12 }}>加载历史净值...</span>
         </div>
       )}
-      {!loading && (error || data.length === 0) && (
+      {!loading && (isError || data.length === 0) && (
         <div style={{ padding: '16px 0', textAlign: 'center' }}>
           <span className="muted" style={{ fontSize: 12 }}>
-            {error ? '加载失败' : '暂无历史净值'}
+            {isError ? '加载失败' : '暂无历史净值'}
           </span>
         </div>
       )}

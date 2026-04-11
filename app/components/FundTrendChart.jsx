@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { fetchFundHistory } from '../api/fund';
+import * as qk from '../lib/query-keys';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronIcon } from './Icons';
 import {
@@ -16,7 +18,6 @@ import {
   Filler
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { cachedRequest } from '../lib/cacheRequest';
 import FundHistoryNetValue from './FundHistoryNetValue';
 
 ChartJS.register(
@@ -29,6 +30,8 @@ ChartJS.register(
   Legend,
   Filler
 );
+
+const EMPTY_FUND_HISTORY = [];
 
 const CHART_COLORS = {
   dark: {
@@ -81,9 +84,6 @@ function getChartThemeColors(theme) {
 
 export default function FundTrendChart({ code, isExpanded, onToggleExpand, transactions = [], theme = 'dark', hideHeader = false }) {
   const [range, setRange] = useState('3m');
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const chartRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
   const clearActiveIndexRef = useRef(null);
@@ -96,37 +96,18 @@ export default function FundTrendChart({ code, isExpanded, onToggleExpand, trans
 
   const chartColors = useMemo(() => getChartThemeColors(theme), [theme]);
 
-  useEffect(() => {
-    // If collapsed, don't fetch data unless we have no data yet
-    if (!isExpanded && data.length > 0) return;
+  const {
+    data: historyRaw,
+    isPending: loading,
+    isError,
+  } = useQuery({
+    queryKey: qk.fundHistory(code, range),
+    queryFn: () => fetchFundHistory(code, range),
+    enabled: Boolean(code) && isExpanded,
+    staleTime: 10 * 60 * 1000,
+  });
 
-    let active = true;
-    setLoading(true);
-    setError(null);
-    const cacheKey = `fund_history_${code}_${range}`;
-
-    if (isExpanded) {
-      cachedRequest(
-        () => fetchFundHistory(code, range),
-        cacheKey,
-        { cacheTime: 10 * 60 * 1000 }
-      )
-        .then(res => {
-          if (active) {
-            setData(res || []);
-            setLoading(false);
-          }
-        })
-        .catch(err => {
-          if (active) {
-            setError(err);
-            setLoading(false);
-          }
-        });
-
-    }
-    return () => { active = false; };
-  }, [code, range, isExpanded, data.length]);
+  const data = historyRaw ?? EMPTY_FUND_HISTORY;
 
   const ranges = [
     { label: '近1月', value: '1m' },
@@ -772,9 +753,9 @@ export default function FundTrendChart({ code, isExpanded, onToggleExpand, trans
           </div>
         )}
 
-        {!loading && data.length === 0 && (
+        {!loading && (isError || data.length === 0) && (
           <div className="chart-overlay">
-            <span className="muted" style={{ fontSize: '12px' }}>暂无数据</span>
+            <span className="muted" style={{ fontSize: '12px' }}>{isError ? '加载失败' : '暂无数据'}</span>
           </div>
         )}
 

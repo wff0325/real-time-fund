@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react';
-import { cachedRequest, clearCachedRequest } from '../lib/cacheRequest';
+import { getQueryClient } from '../lib/get-query-client';
+import * as qk from '../lib/query-keys';
 
 const FUND_CODE_SEARCH_URL = 'https://fund.eastmoney.com/js/fundcode_search.js';
-const FUND_LIST_CACHE_KEY = 'eastmoney_fundcode_search_list';
 const FUND_LIST_CACHE_TIME = 24 * 60 * 60 * 1000;
 
 const formatEastMoneyFundList = (rawList) => {
@@ -30,8 +30,9 @@ export const useFundFuzzyMatcher = () => {
     allFundLoadPromiseRef.current = (async () => {
       const [fuseModule, allFundList] = await Promise.all([
         import('fuse.js'),
-        cachedRequest(
-          () =>
+        getQueryClient().fetchQuery({
+          queryKey: qk.eastmoneyFundcodeSearchList(),
+          queryFn: () =>
             new Promise((resolve, reject) => {
               if (typeof window === 'undefined' || typeof document === 'undefined' || !document.body) {
                 reject(new Error('NO_BROWSER_ENV'));
@@ -76,9 +77,8 @@ export const useFundFuzzyMatcher = () => {
 
               document.body.appendChild(script);
             }),
-          FUND_LIST_CACHE_KEY,
-          { cacheTime: FUND_LIST_CACHE_TIME }
-        ),
+          staleTime: FUND_LIST_CACHE_TIME,
+        }),
       ]);
       const Fuse = fuseModule.default;
       const fuse = new Fuse(Array.isArray(allFundList) ? allFundList : [], {
@@ -97,7 +97,7 @@ export const useFundFuzzyMatcher = () => {
       return await allFundLoadPromiseRef.current;
     } catch (e) {
       allFundLoadPromiseRef.current = null;
-      clearCachedRequest(FUND_LIST_CACHE_KEY);
+      getQueryClient().removeQueries({ queryKey: qk.eastmoneyFundcodeSearchList() });
       throw e;
     }
   }, []);

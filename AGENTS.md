@@ -18,7 +18,7 @@ real-time-fund/
 │   ├── globals.css               # Tailwind v4 + glassmorphism CSS variables (~3557 lines)
 │   ├── api/fund.js               # ALL external data fetching (~954 lines, JSONP + script injection)
 │   ├── components/               # 47 app-specific UI components (modals, cards, tables, charts)
-│   ├── lib/                      # Core utilities: supabase, cacheRequest, tradingCalendar, valuationTimeseries
+│   ├── lib/                      # Core utilities: supabase, get-query-client, query-keys, tradingCalendar, valuationTimeseries
 │   ├── hooks/                    # Custom hooks: useBodyScrollLock, useFundFuzzyMatcher
 │   └── assets/                   # Static images (GitHub SVG, donation QR codes)
 ├── components/ui/                # 15 shadcn/ui primitives (accordion, button, dialog, drawer, etc.)
@@ -55,7 +55,7 @@ real-time-fund/
 | OCR import | `app/page.jsx` (processFiles) | Tesseract.js + LLM parsing |
 | Valuation intraday chart | `app/lib/valuationTimeseries.js` | localStorage time-series |
 | Trading calendar | `app/lib/tradingCalendar.js` | Chinese holiday detection via CDN |
-| Request caching | `app/lib/cacheRequest.js` | In-memory cache with dedup |
+| Request caching | TanStack Query (`app/lib/get-query-client.js`, `app/lib/query-keys.js`) | Dedup + staleTime/gcTime |
 | UI primitives | `components/ui/` | shadcn/ui — accordion, dialog, drawer, select, etc. |
 | Global styles | `app/globals.css` | CSS variables, glassmorphism, responsive |
 | CI/CD | `.github/workflows/nextjs.yml` | Build + deploy to GitHub Pages |

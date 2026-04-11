@@ -24,7 +24,7 @@ Single file (`fund.js`, ~954 lines) containing ALL external data fetching for th
 
 - **JSONP pattern**: `loadScript(url)` → sets global callback → script.onload → reads `window.XXX` → cleanup
 - **All functions return Promises** — async/await throughout
-- **Cached via `cachedRequest()`** from `app/lib/cacheRequest.js`
+- **Cached via TanStack Query** — `getQueryClient().fetchQuery()` in `fund.js`; keys in `app/lib/query-keys.js`
 - **Error handling**: try/catch returning null/empty — never throws to UI
 - **Market indices**: `MARKET_INDEX_KEYS` array defines 24 indices with `code`, `varKey`, `name`
 - **Stock code normalization**: `normalizeTencentCode()` handles A-share (6-digit), HK (5-digit), US (letter codes)

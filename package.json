@@ -18,6 +18,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.78.0",
+    "@tanstack/react-query": "^5.97.0",
+    "@tanstack/react-query-devtools": "^5.97.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.23",
     "ahooks": "^3.9.6",
@@ -48,6 +50,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",
+    "@tanstack/eslint-plugin-query": "^5.97.0",
     "autoprefixer": "^10.4.27",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.0.0",

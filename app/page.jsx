@@ -8226,6 +8226,25 @@ export default function HomePage() {
             fund={dcaModal.fund}
             plan={dcaPlansForTab[dcaModal.fund?.code]}
             onClose={() => setDcaModal({ open: false, fund: null })}
+            onReset={(fundCode) => {
+              const code = fundCode || dcaModal.fund?.code;
+              if (!code) return;
+              const scope = activeGroupId || DCA_SCOPE_GLOBAL;
+              setDcaPlans((prev) => {
+                const scoped = migrateDcaPlansToScoped(prev);
+                const bucket = isPlainObject(scoped[scope]) ? scoped[scope] : null;
+                if (!bucket || !Object.prototype.hasOwnProperty.call(bucket, code)) return prev;
+                const nextBucket = { ...bucket };
+                delete nextBucket[code];
+                const next = { ...scoped };
+                if (Object.keys(nextBucket).length === 0) delete next[scope];
+                else next[scope] = nextBucket;
+                storageHelper.setItem('dcaPlans', JSON.stringify(next));
+                return next;
+              });
+              setDcaModal({ open: false, fund: null });
+              showToast('已重置定投数据', 'success');
+            }}
             onConfirm={(config) => {
               const code = config?.fundCode || dcaModal.fund?.code;
               if (!code) {

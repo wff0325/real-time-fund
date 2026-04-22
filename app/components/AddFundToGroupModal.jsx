@@ -8,8 +8,11 @@ import {
   DialogContent,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { getTagThemeBadgeProps } from './AddTagDialog';
+import { cn } from '@/lib/utils';
 
-export default function AddFundToGroupModal({ allFunds, currentGroupCodes, holdings = {}, onClose, onAdd }) {
+export default function AddFundToGroupModal({ allFunds, currentGroupCodes, holdings = {}, fundTagListsByCode = {}, fundTagRecords = [], onClose, onAdd }) {
   const [selected, setSelected] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -22,6 +25,15 @@ export default function AddFundToGroupModal({ allFunds, currentGroupCodes, holdi
       (f.code && f.code.includes(query))
     );
   }, [allFunds, currentGroupCodes, searchQuery]);
+
+  /** 全局标签池 id → theme 查找表，确保渲染主题与用户最新配置一致 */
+  const tagThemeById = useMemo(() => {
+    const map = {};
+    for (const r of (fundTagRecords || [])) {
+      if (r?.id) map[String(r.id)] = String(r.theme ?? 'default').trim() || 'default';
+    }
+    return map;
+  }, [fundTagRecords]);
 
   const getHoldingAmount = (fund) => {
     const holding = holdings[fund?.code];
@@ -135,7 +147,32 @@ export default function AddFundToGroupModal({ allFunds, currentGroupCodes, holdi
                   </div>
                   <div className="fund-info" style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>{fund.name}</div>
-                    <div className="muted" style={{ fontSize: '12px' }}>#{fund.code}</div>
+                    <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 3 }}>
+                      <span className="muted">#{fund.code}</span>
+                      {Array.isArray(fundTagListsByCode[fund.code]) && fundTagListsByCode[fund.code].length > 0 && (
+                        <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 2 }}>
+                          {fundTagListsByCode[fund.code].map((raw, idx) => {
+                            if (!raw || typeof raw !== 'object' || !raw.name) return null;
+                            const name = String(raw.name).trim();
+                            if (!name) return null;
+                            // 优先取全局标签池中的最新主题，实例快照 theme 作为兜底
+                            const theme = (raw.id && tagThemeById[String(raw.id)])
+                              ? tagThemeById[String(raw.id)]
+                              : String(raw.theme ?? 'default').trim() || 'default';
+                            const { variant, className: themeCls } = getTagThemeBadgeProps(theme);
+                            return (
+                              <Badge
+                                key={`${name}-${idx}`}
+                                variant={variant}
+                                className={cn('font-normal text-[11px]', themeCls)}
+                              >
+                                {name}
+                              </Badge>
+                            );
+                          })}
+                        </span>
+                      )}
+                    </div>
                     {getHoldingAmount(fund) != null && (
                       <div className="muted" style={{ fontSize: '12px', marginTop: 2 }}>
                         持仓金额：<span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{getHoldingAmount(fund).toFixed(2)}</span>

@@ -115,6 +115,12 @@ export default function MoveGroupModal({
       <Dialog open={!!open} onOpenChange={(next) => { if (!next) onClose?.(); }}>
         <DialogContent
           className="sm:max-w-md max-h-[88vh] flex flex-col p-0 overflow-hidden"
+          onPointerDownOutside={(event) => {
+            if (confirmOverwriteOpen) event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            if (confirmOverwriteOpen) event.preventDefault();
+          }}
         >
           <DialogHeader className="flex-shrink-0 px-6 pb-4 pt-6 text-left border-b border-[var(--border)]">
             <DialogTitle className="text-base font-semibold text-[var(--text)]">

@@ -51,6 +51,10 @@ $$;
 grant execute on function public.update_user_config_partial(jsonb) to authenticated;
 grant execute on function public.update_user_config_partial(jsonb) to service_role;
 
+-- 开启实时订阅 Publication（必须，否则 Supabase Realtime 无法监听 user_configs 表变更）
+drop publication if exists supabase_realtime for table public.user_configs;
+create publication supabase_realtime for table public.user_configs;
+
 -- v1.0.0 版本更新关联板块表
 
 -- 创建 fund_related 表

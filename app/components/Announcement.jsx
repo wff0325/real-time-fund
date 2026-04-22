@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.0';
+const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.1';
 
 export default function Announcement() {
   const [isVisible, setIsVisible] = useState(false);
@@ -75,11 +75,12 @@ export default function Announcement() {
               <span>公告</span>
             </div>
             <div style={{ color: 'var(--text)', lineHeight: '1.6', fontSize: '15px', overflowY: 'auto', minHeight: 0, flex: 1, paddingRight: '4px' }}>
-              <p>v1.3.0 更新内容如下：</p>
-              <p>1. 新增标签列，可自定义基金标签，支持批量添加。</p>
-              <p>2. 新增持仓成本、成本净值列。</p>
-              <p>3. 拍照识别方案调整（需登录）。</p>
-              <p>4. 修复我的收益日历展示样式。</p>
+              <p>v1.3.1 更新内容如下：</p>
+              <p>1. 更换截图识别 ai 方案。</p>
+              <p>2. 修复分组新建、删除问题。</p>
+              <p>3. 修复移动端管理分组二次确认弹框层级问题。</p>
+              <p>4. 基金卡片、添加分组展示基金标签。</p>
+              <p>5. 定投弹框新增重置按钮。</p>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>

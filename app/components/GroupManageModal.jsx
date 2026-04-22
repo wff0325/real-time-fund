@@ -137,6 +137,14 @@ export default function GroupManageModal({ groups, onClose, onSave }) {
           overlayClassName="modal-overlay"
           style={{ maxWidth: '500px', width: '90vw', zIndex: 99 }}
           onOpenAutoFocus={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => {
+            // 二次确认弹框是单独的 Dialog（portal 到 body）。
+            // 当它打开时，在确认弹框内的点击会被外层 Dialog 视作“点到外部”，从而触发外层关闭。
+            if (deleteConfirm) event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            if (deleteConfirm) event.preventDefault();
+          }}
         >
           <DialogTitle asChild>
             <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
@@ -212,12 +220,14 @@ export default function GroupManageModal({ groups, onClose, onSave }) {
 
       <AnimatePresence>
         {deleteConfirm && (
-          <ConfirmModal
-            title="删除确认"
-            message={`确定要删除分组 "${deleteConfirm.name}" 吗？分组内的基金不会被删除。`}
-            onConfirm={handleConfirmDelete}
-            onCancel={() => setDeleteConfirm(null)}
-          />
+          <div onPointerDown={(e) => e.stopPropagation()}>
+            <ConfirmModal
+              title="删除确认"
+              message={`确定要删除分组 "${deleteConfirm.name}" 吗？分组内的基金数据会被删除。`}
+              onConfirm={handleConfirmDelete}
+              onCancel={() => setDeleteConfirm(null)}
+            />
+          </div>
         )}
       </AnimatePresence>
     </>

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 export default function SearchFund({
   value,
   onSearch,
-  placeholder = "搜索当前分组基金名称或代码...",
+  placeholder = "筛选当前分组基金名称或代码...",
   disabled = false,
 }) {
   const [draft, setDraft] = useState(value ?? "")
@@ -111,10 +111,10 @@ export default function SearchFund({
           className="h-9 shrink-0 rounded-md bg-primary px-3 text-sm text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary"
           disabled={!canSearch}
           onClick={handleSearch}
-          aria-label="搜索分组内基金"
-          title="搜索"
+          aria-label="筛选分组内基金"
+          title="筛选"
         >
-          搜索
+          筛选
         </button>
       </Field>
     </div>

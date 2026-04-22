@@ -148,6 +148,7 @@
    - 启用行级安全（RLS），确保用户只能访问自己的数据
    - 创建 SELECT / INSERT / UPDATE 策略
    - 创建 `update_user_config_partial` 函数（用于增量更新配置）
+   - 创建 `supabase_realtime` Publication（开启对 `user_configs` 表的实时变更监听）
 
    执行成功后，可在 Table Editor 中看到 `user_configs` 表。
 
@@ -168,6 +169,26 @@
    - 同理，向 `fund_secid` 表导入 `related_sector_secid.csv` 文件
 
    导入成功后，基金卡片将展示其追踪的关联板块及实时涨跌幅。
+
+9. 部署 Supabase Edge Function（可选）
+
+   本项目 OCR 识别基金截图功能依赖第三方模型接口，已封装为 Supabase Edge Function 以隐藏 API Key 并避免跨域问题。大模型服务赞助商为 [AINX](https://api.ainx.cc/)。
+
+   **配置步骤：**
+   - 需要用户已登录（函数会读取请求头 `Authorization`，并通过 `supabase.auth.getUser()` 校验 JWT）
+   - 进入 **Supabase 控制台** → 选择你的项目
+   - 左侧菜单找到 **Project Settings**（项目设置）
+   - 点击 **Edge Functions** 选项卡
+   - 在 **Functions** 区域点击 **Develop a new function** → **Via Editor**
+   - 输入函数名称 `analyze-fund`和复制 `doc/edgeFunction/analyze-fund.ts` 内容到编辑器中，点击 **Create**
+   - 到该函数的 Settings 页，取消 **Verify JWT with legacy secret** 选项
+   - 在 **Secrets** 区域点击 **Add a new secret**
+   - Name 填入 `AINX_API_KEY`，Value 填入你从 [AINX 控制台](https://console.ainx.cc/token) 申请的 Key
+   - 点击 **保存** 即可
+
+   **常见排查：**
+   - 401 Unauthorized：说明当前未登录或未携带用户 JWT（先完成 Supabase 登录流程）
+   - 500 / "模型未返回合法 JSON"：通常是第三方模型接口返回格式异常或 Key 无效
 
 更多 Supabase 相关内容查阅官方文档。
 

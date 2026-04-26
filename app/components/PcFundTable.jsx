@@ -250,6 +250,29 @@ export default function PcFundTable({
     setActiveId(null);
   };
   const groupKey = currentTab ?? 'all';
+  const currentGroupName = useMemo(() => {
+    if (groupKey === 'all') return '全部';
+    if (groupKey === 'fav') return '自选';
+    return groups.find((g) => g?.id === groupKey)?.name || '当前';
+  }, [groupKey, groups]);
+  const settingSyncOptions = useMemo(() => {
+    const baseOptions = [
+      { id: 'all', name: '全部', description: '全部分组' },
+      { id: 'fav', name: '自选', description: '自选分组' },
+      ...(Array.isArray(groups) ? groups : []).map((group) => ({
+        id: group?.id,
+        name: group?.name || '未命名',
+        description: '自定义分组',
+      })),
+    ];
+    const seen = new Set();
+    return baseOptions.filter((item) => {
+      const id = String(item?.id ?? '').trim();
+      if (!id || id === groupKey || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [groupKey, groups]);
 
   const isGroupTab = currentTab && currentTab !== 'all' && currentTab !== 'fav';
   // 批量删除：之前仅自定义分组支持，这里扩展到「全部 / 自选 / 自定义分组」
@@ -472,6 +495,40 @@ export default function PcFundTable({
 
   const handleToggleShowFullFundName = (show) => {
     persistPcGroupConfig({ pcShowFullFundName: show });
+  };
+
+  const handleSyncPcSettings = (targetIds = []) => {
+    if (!targetIds.length || typeof window === 'undefined') return false;
+    try {
+      const parsed = storageStore.getItem('customSettings') || {};
+      const payload = {
+        pcTableColumnOrder: [...columnOrder],
+        pcTableColumnVisibility: { ...columnVisibility },
+        pcTableColumns: { ...columnSizing },
+        pcShowFullFundName: !!showFullFundName,
+      };
+      const targetUpdates = {};
+      targetIds.forEach((targetId) => {
+        if (!targetId || targetId === groupKey) return;
+        const group = parsed[targetId] && typeof parsed[targetId] === 'object' ? { ...parsed[targetId] } : {};
+        parsed[targetId] = { ...group, ...payload };
+        targetUpdates[targetId] = payload;
+      });
+      const syncedCount = Object.keys(targetUpdates).length;
+      if (syncedCount === 0) return false;
+      storageStore.setItem('customSettings', JSON.stringify(parsed));
+      setConfigByGroup((prev) => {
+        const next = { ...prev };
+        Object.entries(targetUpdates).forEach(([targetId, updates]) => {
+          next[targetId] = { ...next[targetId], ...updates };
+        });
+        return next;
+      });
+      onCustomSettingsChange?.();
+      return syncedCount;
+    } catch {
+      return false;
+    }
   };
 
   const setColumnOrder = (nextOrderOrUpdater) => {
@@ -2186,6 +2243,9 @@ export default function PcFundTable({
         onResetSizing={() => setResetConfirmOpen(true)}
         showFullFundName={showFullFundName}
         onToggleShowFullFundName={handleToggleShowFullFundName}
+        syncOptions={settingSyncOptions}
+        currentGroupName={currentGroupName}
+        onSyncSettings={handleSyncPcSettings}
       />
       {moveGroupOpen && (
         <MoveGroupModal

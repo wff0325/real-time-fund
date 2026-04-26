@@ -28,6 +28,7 @@ import FitText from './FitText';
 import MobileFundCardDrawer from './MobileFundCardDrawer';
 import MobileSettingModal from './MobileSettingModal';
 import MoveGroupModal from './MoveGroupModal';
+import SuccessModal from './SuccessModal';
 import { ArrowUpToLineIcon, CloseIcon, DragIcon, FolderPlusIcon, LinkIcon, PencilIcon, SettingsIcon, StarIcon, TrashIcon } from './Icons';
 import { fetchFundPeriodReturns, fetchRelatedSectors, fetchRelatedSectorLiveQuote } from '@/app/api/fund';
 import { storageStore } from '../stores';
@@ -483,6 +484,29 @@ export default function MobileFundTable({
   };
 
   const groupKey = currentTab ?? 'all';
+  const currentGroupName = useMemo(() => {
+    if (groupKey === 'all') return '全部';
+    if (groupKey === 'fav') return '自选';
+    return groups.find((g) => g?.id === groupKey)?.name || '当前';
+  }, [groupKey, groups]);
+  const settingSyncOptions = useMemo(() => {
+    const baseOptions = [
+      { id: 'all', name: '全部', description: '全部分组' },
+      { id: 'fav', name: '自选', description: '自选分组' },
+      ...(Array.isArray(groups) ? groups : []).map((group) => ({
+        id: group?.id,
+        name: group?.name || '未命名',
+        description: '自定义分组',
+      })),
+    ];
+    const seen = new Set();
+    return baseOptions.filter((item) => {
+      const id = String(item?.id ?? '').trim();
+      if (!id || id === groupKey || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [groupKey, groups]);
 
   const getCustomSettingsWithMigration = () => {
     if (typeof window === 'undefined') return {};
@@ -617,7 +641,41 @@ export default function MobileFundTable({
     persistShowFullFundName(show);
   };
 
+  const handleSyncMobileSettings = (targetIds = []) => {
+    if (!targetIds.length || typeof window === 'undefined') return false;
+    try {
+      const parsed = storageStore.getItem('customSettings') || {};
+      const payload = {
+        mobileTableColumnOrder: [...mobileColumnOrder],
+        mobileTableColumnVisibility: { ...mobileColumnVisibility },
+        mobileShowFullFundName: !!showFullFundName,
+      };
+      const targetUpdates = {};
+      targetIds.forEach((targetId) => {
+        if (!targetId || targetId === groupKey) return;
+        const group = parsed[targetId] && typeof parsed[targetId] === 'object' ? { ...parsed[targetId] } : {};
+        parsed[targetId] = { ...group, ...payload };
+        targetUpdates[targetId] = payload;
+      });
+      const syncedCount = Object.keys(targetUpdates).length;
+      if (syncedCount === 0) return false;
+      storageStore.setItem('customSettings', JSON.stringify(parsed));
+      setConfigByGroup((prev) => {
+        const next = { ...prev };
+        Object.entries(targetUpdates).forEach(([targetId, updates]) => {
+          next[targetId] = { ...next[targetId], ...updates };
+        });
+        return next;
+      });
+      onCustomSettingsChange?.();
+      return syncedCount;
+    } catch {
+      return false;
+    }
+  };
+
   const [settingModalOpen, setSettingModalOpen] = useState(false);
+  const [syncSuccessOpen, setSyncSuccessOpen] = useState(false);
 
   useEffect(() => {
     onMobileSettingModalOpenChange?.(settingModalOpen);
@@ -2190,7 +2248,23 @@ export default function MobileFundTable({
             onResetColumnVisibility={handleResetMobileColumnVisibility}
             showFullFundName={showFullFundName}
             onToggleShowFullFundName={handleToggleShowFullFundName}
+            syncOptions={settingSyncOptions}
+            currentGroupName={currentGroupName}
+            onSyncSettings={handleSyncMobileSettings}
+            onSyncSuccess={() => {
+              window.setTimeout(() => setSyncSuccessOpen(true), 0);
+            }}
           />
+        )}
+
+        {syncSuccessOpen && typeof document !== 'undefined' && ReactDOM.createPortal(
+          <SuccessModal
+            message="同步成功"
+            onClose={() => setSyncSuccessOpen(false)}
+            overlayStyle={{ zIndex: 10004 }}
+            cardStyle={{ maxWidth: '420px', width: '90vw', zIndex: 10005 }}
+          />,
+          document.body,
         )}
 
         <MobileFundCardDrawer

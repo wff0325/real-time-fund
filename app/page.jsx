@@ -2049,6 +2049,17 @@ export default function HomePage() {
         }
         return next;
       });
+
+      try {
+        const earningsScope = gid || DAILY_EARNINGS_SCOPE_ALL;
+        clearDailyEarnings(code, earningsScope);
+        setFundDailyEarnings((prev) => {
+          if (!isPlainObject(prev) || !isPlainObject(prev[earningsScope]) || !(code in prev[earningsScope])) return prev;
+          const next = { ...prev, [earningsScope]: { ...prev[earningsScope] } };
+          delete next[earningsScope][code];
+          return next;
+        });
+      } catch { }
     }
     setClearConfirm(null);
   };

@@ -54,8 +54,6 @@ const SYNC_KEYS = new Set([
   'transactions', 'dcaPlans', 'customSettings', 'fundDailyEarnings'
 ]);
 
-const SORT_DISPLAY_MODES = new Set(['buttons', 'dropdown']);
-
 /**
  * 管理 localStorage 数据的 Zustand Store
  */
@@ -80,10 +78,6 @@ export const useStorageStore = create((set, get) => ({
   dcaPlans: {},
   customSettings: {},
   fundDailyEarnings: {},
-  sortBy: 'default',
-  sortOrder: 'desc',
-  pcSortDisplayMode: 'buttons',
-  mobileSortDisplayMode: 'buttons',
 
   initFunds: () => {
     if (typeof window !== 'undefined') {
@@ -143,90 +137,8 @@ export const useStorageStore = create((set, get) => ({
 
   initCustomSettings: () => {
     if (typeof window !== 'undefined') {
-      const next = get().getItem('customSettings', {});
-      let pcMode = get().pcSortDisplayMode;
-      let mobileMode = get().mobileSortDisplayMode;
-      if (next && typeof next === 'object' && !Array.isArray(next)) {
-        if (typeof next.localSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(next.localSortDisplayMode)) {
-          pcMode = next.localSortDisplayMode;
-          mobileMode = next.localSortDisplayMode;
-        } else {
-          if (typeof next.pcLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(next.pcLocalSortDisplayMode)) {
-            pcMode = next.pcLocalSortDisplayMode;
-          }
-          if (typeof next.mobileLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(next.mobileLocalSortDisplayMode)) {
-            mobileMode = next.mobileLocalSortDisplayMode;
-          }
-        }
-      }
-      set({ customSettings: next, pcSortDisplayMode: pcMode, mobileSortDisplayMode: mobileMode });
+      set({ customSettings: get().getItem('customSettings', {}) });
     }
-  },
-
-  initSortPreferences: () => {
-    if (typeof window === 'undefined') return;
-    const savedSortBy = get().getItem('localSortBy');
-    const savedSortOrder = get().getItem('localSortOrder');
-    const next = {};
-    if (typeof savedSortBy === 'string' && savedSortBy.trim()) next.sortBy = savedSortBy;
-    if (savedSortOrder === 'asc' || savedSortOrder === 'desc') next.sortOrder = savedSortOrder;
-    let pcMode = get().pcSortDisplayMode;
-    let mobileMode = get().mobileSortDisplayMode;
-    try {
-      const parsed = get().getItem('customSettings', {});
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        if (typeof parsed.localSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.localSortDisplayMode)) {
-          pcMode = parsed.localSortDisplayMode;
-          mobileMode = parsed.localSortDisplayMode;
-        } else {
-          if (typeof parsed.pcLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.pcLocalSortDisplayMode)) {
-            pcMode = parsed.pcLocalSortDisplayMode;
-          }
-          if (typeof parsed.mobileLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.mobileLocalSortDisplayMode)) {
-            mobileMode = parsed.mobileLocalSortDisplayMode;
-          }
-        }
-      }
-    } catch {}
-    next.pcSortDisplayMode = pcMode;
-    next.mobileSortDisplayMode = mobileMode;
-    if (Object.keys(next).length) set(next);
-  },
-
-  setSortBy: (nextSortBy) => {
-    const next = typeof nextSortBy === 'function' ? nextSortBy(get().sortBy) : nextSortBy;
-    set({ sortBy: next });
-    get().setItem('localSortBy', String(next));
-  },
-
-  setSortOrder: (nextSortOrder) => {
-    const next = typeof nextSortOrder === 'function' ? nextSortOrder(get().sortOrder) : nextSortOrder;
-    set({ sortOrder: next });
-    get().setItem('localSortOrder', String(next));
-  },
-
-  setPcSortDisplayMode: (nextMode) => {
-    const next = typeof nextMode === 'function' ? nextMode(get().pcSortDisplayMode) : nextMode;
-    if (typeof next !== 'string' || !SORT_DISPLAY_MODES.has(next)) return;
-    set({ pcSortDisplayMode: next });
-    get().setCustomSettings((prev) => {
-      const base = prev && typeof prev === 'object' && !Array.isArray(prev) ? prev : {};
-      const out = { ...base, pcLocalSortDisplayMode: next };
-      if ('localSortDisplayMode' in out) delete out.localSortDisplayMode;
-      return out;
-    });
-  },
-
-  setMobileSortDisplayMode: (nextMode) => {
-    const next = typeof nextMode === 'function' ? nextMode(get().mobileSortDisplayMode) : nextMode;
-    if (typeof next !== 'string' || !SORT_DISPLAY_MODES.has(next)) return;
-    set({ mobileSortDisplayMode: next });
-    get().setCustomSettings((prev) => {
-      const base = prev && typeof prev === 'object' && !Array.isArray(prev) ? prev : {};
-      const out = { ...base, mobileLocalSortDisplayMode: next };
-      if ('localSortDisplayMode' in out) delete out.localSortDisplayMode;
-      return out;
-    });
   },
 
   initFundDailyEarnings: () => {
@@ -331,22 +243,7 @@ export const useStorageStore = create((set, get) => ({
 
   setCustomSettings: (nextCustomSettings) => {
     const next = typeof nextCustomSettings === 'function' ? nextCustomSettings(get().customSettings) : nextCustomSettings;
-    let pcMode = get().pcSortDisplayMode;
-    let mobileMode = get().mobileSortDisplayMode;
-    if (next && typeof next === 'object' && !Array.isArray(next)) {
-      if (typeof next.localSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(next.localSortDisplayMode)) {
-        pcMode = next.localSortDisplayMode;
-        mobileMode = next.localSortDisplayMode;
-      } else {
-        if (typeof next.pcLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(next.pcLocalSortDisplayMode)) {
-          pcMode = next.pcLocalSortDisplayMode;
-        }
-        if (typeof next.mobileLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(next.mobileLocalSortDisplayMode)) {
-          mobileMode = next.mobileLocalSortDisplayMode;
-        }
-      }
-    }
-    set({ customSettings: next, pcSortDisplayMode: pcMode, mobileSortDisplayMode: mobileMode });
+    set({ customSettings: next });
     get().setItem('customSettings', JSON.stringify(next));
   },
 
@@ -396,24 +293,7 @@ export const useStorageStore = create((set, get) => ({
       else if (key === 'pendingTrades') set({ pendingTrades: parsed });
       else if (key === 'transactions') set({ transactions: parsed });
       else if (key === 'dcaPlans') set({ dcaPlans: parsed });
-      else if (key === 'customSettings') {
-        let pcMode = get().pcSortDisplayMode;
-        let mobileMode = get().mobileSortDisplayMode;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          if (typeof parsed.localSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.localSortDisplayMode)) {
-            pcMode = parsed.localSortDisplayMode;
-            mobileMode = parsed.localSortDisplayMode;
-          } else {
-            if (typeof parsed.pcLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.pcLocalSortDisplayMode)) {
-              pcMode = parsed.pcLocalSortDisplayMode;
-            }
-            if (typeof parsed.mobileLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.mobileLocalSortDisplayMode)) {
-              mobileMode = parsed.mobileLocalSortDisplayMode;
-            }
-          }
-        }
-        set({ customSettings: parsed, pcSortDisplayMode: pcMode, mobileSortDisplayMode: mobileMode });
-      }
+      else if (key === 'customSettings') set({ customSettings: parsed });
       else if (key === 'fundDailyEarnings') set({ fundDailyEarnings: parsed });
     } catch (e) {
       // 如果不是 JSON，或者是 refreshMs 这种数字字符串

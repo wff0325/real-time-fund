@@ -11,7 +11,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
-import { isNumber, isString, isPlainObject, isNil, isEqual } from 'lodash';
+import { isNumber, isString, isPlainObject, isNil } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
 import { toast as sonnerToast } from 'sonner';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
@@ -150,12 +150,7 @@ export default function HomePage() {
     initHoldings, initGroupHoldings,
     initPendingTrades, initTransactions,
     initDcaPlans, initCustomSettings,
-    initFundDailyEarnings,
-    sortBy, setSortBy,
-    sortOrder, setSortOrder,
-    pcSortDisplayMode, setPcSortDisplayMode,
-    mobileSortDisplayMode, setMobileSortDisplayMode,
-    initSortPreferences
+    initFundDailyEarnings
   } = useStorageStore();
   /** 基金标签（独立 localStorage 键 `tags`）：{ id, name, theme, fundCodes: string[] }[] */
   const [fundTagRecords, setFundTagRecords] = useState([]);
@@ -255,40 +250,20 @@ export default function HomePage() {
   const SORT_DISPLAY_MODES = new Set(['buttons', 'dropdown']);
 
   // 排序状态
+  const [sortBy, setSortBy] = useState('default'); // default, name, yield, yesterdayIncrease, holding, holdingAmount, todayProfit
+  const [sortOrder, setSortOrder] = useState('desc'); // asc | desc
+  const [pcSortDisplayMode, setPcSortDisplayMode] = useState('buttons'); // buttons | dropdown
+  const [mobileSortDisplayMode, setMobileSortDisplayMode] = useState('buttons'); // buttons | dropdown
   const [isSortLoaded, setIsSortLoaded] = useState(false);
   const [sortRules, setSortRules] = useState(DEFAULT_SORT_RULES);
   const [sortSettingOpen, setSortSettingOpen] = useState(false);
 
-  const mergeSortRulesWithDefaults = (rulesFromSettings) => {
-    if (!Array.isArray(rulesFromSettings) || !rulesFromSettings.length) return null;
-    const defaultMap = new Map(DEFAULT_SORT_RULES.map((rule) => [rule.id, rule]));
-    const merged = [];
-    for (const stored of rulesFromSettings) {
-      const base = defaultMap.get(stored.id);
-      if (!base) continue;
-      merged.push({
-        ...base,
-        enabled:
-          typeof stored.enabled === "boolean"
-            ? stored.enabled
-            : base.enabled,
-        alias:
-          typeof stored.alias === "string" && stored.alias.trim()
-            ? stored.alias.trim()
-            : base.alias,
-      });
-    }
-    DEFAULT_SORT_RULES.forEach((rule) => {
-      if (!merged.some((r) => r.id === rule.id)) {
-        merged.push(rule);
-      }
-    });
-    return merged;
-  };
-
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      initSortPreferences();
+      const savedSortBy = storageStore.getItem('localSortBy');
+      const savedSortOrder = storageStore.getItem('localSortOrder');
+      if (savedSortBy) setSortBy(savedSortBy);
+      if (savedSortOrder) setSortOrder(savedSortOrder);
 
       // 1）优先从 customSettings.localSortRules 读取
       // 2）兼容旧版独立 localSortRules 字段
@@ -299,6 +274,24 @@ export default function HomePage() {
           if (Array.isArray(parsed.localSortRules)) {
             rulesFromSettings = parsed.localSortRules;
           }
+          
+          let pcMode = 'buttons';
+          let mobileMode = 'buttons';
+
+          if (parsed && typeof parsed.localSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.localSortDisplayMode)) {
+            pcMode = parsed.localSortDisplayMode;
+            mobileMode = parsed.localSortDisplayMode;
+          } else {
+            if (parsed && typeof parsed.pcLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.pcLocalSortDisplayMode)) {
+              pcMode = parsed.pcLocalSortDisplayMode;
+            }
+            if (parsed && typeof parsed.mobileLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.mobileLocalSortDisplayMode)) {
+              mobileMode = parsed.mobileLocalSortDisplayMode;
+            }
+          }
+
+          setPcSortDisplayMode(pcMode);
+          setMobileSortDisplayMode(mobileMode);
         }
       } catch {
         // ignore
@@ -318,8 +311,38 @@ export default function HomePage() {
       }
 
       if (rulesFromSettings && rulesFromSettings.length) {
-        const merged = mergeSortRulesWithDefaults(rulesFromSettings);
-        if (merged) setSortRules(merged);
+        // 1）先按本地存储的顺序还原（包含 alias、enabled 等字段）
+        const defaultMap = new Map(
+          DEFAULT_SORT_RULES.map((rule) => [rule.id, rule])
+        );
+        const merged = [];
+
+        // 先遍历本地配置，保持用户自定义的顺序和别名/开关
+        for (const stored of rulesFromSettings) {
+          const base = defaultMap.get(stored.id);
+          if (!base) continue;
+          merged.push({
+            ...base,
+            // 只用本地的 enabled / alias 等个性化字段，基础 label 仍以内置为准
+            enabled:
+              typeof stored.enabled === "boolean"
+                ? stored.enabled
+                : base.enabled,
+            alias:
+              typeof stored.alias === "string" && stored.alias.trim()
+                ? stored.alias.trim()
+                : base.alias,
+          });
+        }
+
+        // 再把本次版本新增、但本地还没记录过的规则追加到末尾
+        DEFAULT_SORT_RULES.forEach((rule) => {
+          if (!merged.some((r) => r.id === rule.id)) {
+            merged.push(rule);
+          }
+        });
+
+        setSortRules(merged);
       }
 
       setIsSortLoaded(true);
@@ -327,23 +350,16 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!isSortLoaded) return;
-    const incoming = customSettings?.localSortRules;
-    if (!Array.isArray(incoming) || !incoming.length) return;
-    const merged = mergeSortRulesWithDefaults(incoming);
-    if (!merged) return;
-    if (!isEqual(merged, sortRules)) {
-      setSortRules(merged);
-    }
-  }, [customSettings, isSortLoaded, sortRules]);
-
-  useEffect(() => {
     if (typeof window !== 'undefined' && isSortLoaded) {
+      storageStore.setItem('localSortBy', sortBy);
+      storageStore.setItem('localSortOrder', sortOrder);
       try {
         const parsed = customSettings || {};
         const next = {
           ...(parsed && typeof parsed === 'object' ? parsed : {}),
           localSortRules: sortRules,
+          pcLocalSortDisplayMode: pcSortDisplayMode,
+          mobileLocalSortDisplayMode: mobileSortDisplayMode,
         };
         // 删除旧的字段以兼容历史数据
         if ('localSortDisplayMode' in next) {
@@ -354,7 +370,7 @@ export default function HomePage() {
         // ignore
       }
     }
-  }, [sortRules, isSortLoaded]);
+  }, [sortBy, sortOrder, sortRules, pcSortDisplayMode, mobileSortDisplayMode, isSortLoaded]);
 
   // 当用户关闭某个排序规则时，如果当前 sortBy 不再可用，则自动切换到第一个启用的规则
   useEffect(() => {
@@ -6409,6 +6425,251 @@ export default function HomePage() {
     }
   };
 
+  const handleImportFileChange = async (e) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (isPlainObject(data)) {
+        // 从 localStorage 读取最新数据进行合并，防止状态滞后导致的数据丢失
+        const currentFunds = storageStore.getItem('funds', []);
+        const currentFavorites = storageStore.getItem('favorites', []);
+        const currentGroups = storageStore.getItem('groups', []);
+        const currentCollapsed = storageStore.getItem('collapsedCodes', []);
+        const currentTrends = storageStore.getItem('collapsedTrends', []);
+        const currentEarnings = storageStore.getItem('collapsedEarnings', []);
+        const currentPendingTrades = storageStore.getItem('pendingTrades', []);
+        const currentDcaPlans = storageStore.getItem('dcaPlans', {});
+        const currentGroupHoldings = storageStore.getItem('groupHoldings', {});
+
+        let mergedFunds = currentFunds;
+        let appendedCodes = [];
+
+        if (Array.isArray(data.funds)) {
+          const incomingFunds = dedupeByCode(data.funds.map(stripLegacyTagsFromFundObject));
+          const existingCodes = new Set(currentFunds.map(f => f.code));
+          const newItems = incomingFunds.filter(f => f && f.code && !existingCodes.has(f.code));
+          appendedCodes = newItems.map(f => f.code);
+          mergedFunds = [...currentFunds, ...newItems];
+          setFunds(mergedFunds);
+        }
+
+        if (Array.isArray(data.favorites)) {
+          const fundCodeSet = new Set(mergedFunds.map((f) => f?.code).filter(Boolean));
+          const mergedFav = cleanCodeArray([...currentFavorites, ...data.favorites], fundCodeSet);
+          setFavorites(new Set(mergedFav));
+        }
+
+        if (Array.isArray(data.tags)) {
+          const currentTags = storageStore.getItem('tags', []);
+          const fundCodeSet = new Set(mergedFunds.map((f) => f?.code).filter(Boolean));
+          const byId = new Map((Array.isArray(currentTags) ? currentTags : []).map((r) => [String(r.id), r]));
+          for (const r of data.tags) {
+            if (!r || typeof r !== 'object') continue;
+            const codes = getFundCodesFromTagRecord(r).filter((c) => fundCodeSet.has(c));
+            const name = String(r.name ?? '').trim();
+            if (!name) continue;
+            const id = String(r.id ?? '').trim() || uuidv4();
+            const existing = byId.get(id);
+            const mergedCodes = existing
+              ? [...new Set([...getFundCodesFromTagRecord(existing), ...codes])].sort()
+              : codes.sort();
+            const row = sanitizeTagRowForStorage({
+              id,
+              name,
+              theme: String(r.theme ?? '').trim() || DEFAULT_FUND_TAG_THEME,
+              fundCodes: mergedCodes,
+            });
+            if (row) byId.set(id, row);
+          }
+          const mergedTags = Array.from(byId.values())
+            .map(sanitizeTagRowForStorage)
+            .filter(Boolean)
+            .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+          setFundTagRecords(mergedTags);
+          storageHelper.setItem('tags', JSON.stringify(mergedTags));
+        }
+
+        // fundTagLists 已废弃：导入时无需处理该字段
+
+        if (Array.isArray(data.groups)) {
+          // 合并分组：如果 ID 相同则合并 codes，否则添加新分组
+          const mergedGroups = [...currentGroups];
+          data.groups.forEach(incomingGroup => {
+            const existingIdx = mergedGroups.findIndex(g => g.id === incomingGroup.id);
+            if (existingIdx > -1) {
+              mergedGroups[existingIdx] = {
+                ...mergedGroups[existingIdx],
+                codes: Array.from(new Set([...mergedGroups[existingIdx].codes, ...(incomingGroup.codes || [])]))
+              };
+            } else {
+              mergedGroups.push(incomingGroup);
+            }
+          });
+          setGroups(mergedGroups);
+        }
+
+        if (Array.isArray(data.collapsedCodes)) {
+          const mergedCollapsed = Array.from(new Set([...currentCollapsed, ...data.collapsedCodes]));
+          setCollapsedCodes(new Set(mergedCollapsed));
+        }
+
+        if (Array.isArray(data.collapsedTrends)) {
+          const mergedTrends = Array.from(new Set([...currentTrends, ...data.collapsedTrends]));
+          setCollapsedTrends(new Set(mergedTrends));
+        }
+
+        if (Array.isArray(data.collapsedEarnings)) {
+          const mergedEarnings = Array.from(new Set([...currentEarnings, ...data.collapsedEarnings]));
+          setCollapsedEarnings(new Set(mergedEarnings));
+        }
+
+        if (isNumber(data.refreshMs) && data.refreshMs >= 5000) {
+          setRefreshMs(data.refreshMs);
+          setTempSeconds(Math.round(data.refreshMs / 1000));
+        }
+        if (data.viewMode === 'card' || data.viewMode === 'list') {
+          applyViewMode(data.viewMode);
+        }
+
+        if (isPlainObject(data.holdings)) {
+          const mergedHoldings = { ...storageStore.getItem('holdings', {}), ...data.holdings };
+          setHoldings(mergedHoldings);
+        }
+
+        if (isPlainObject(data.groupHoldings)) {
+          const mergedGH = { ...(isPlainObject(currentGroupHoldings) ? currentGroupHoldings : {}) };
+          Object.entries(data.groupHoldings).forEach(([gid, bucket]) => {
+            if (!isPlainObject(bucket)) return;
+            mergedGH[gid] = { ...(mergedGH[gid] || {}), ...bucket };
+          });
+          setGroupHoldings(mergedGH);
+        }
+
+        if (isPlainObject(data.transactions)) {
+             const currentTransactions = storageStore.getItem('transactions', {});
+             const mergedTransactions = { ...currentTransactions };
+             Object.entries(data.transactions).forEach(([code, txs]) => {
+                 if (!Array.isArray(txs)) return;
+                 const existing = mergedTransactions[code] || [];
+                 const existingIds = new Set(existing.map(t => t.id));
+                 const newTxs = txs.filter(t => !existingIds.has(t.id));
+                 mergedTransactions[code] = [...existing, ...newTxs].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+             });
+             setTransactions(mergedTransactions);
+        }
+
+        if (Array.isArray(data.pendingTrades)) {
+          const existingPending = Array.isArray(currentPendingTrades) ? currentPendingTrades : [];
+          const incomingPending = data.pendingTrades.filter((trade) => trade && trade.fundCode);
+          const fundCodeSet = new Set(mergedFunds.map((f) => f.code));
+          const keyOf = (trade) => {
+            if (trade?.id) return `id:${trade.id}`;
+            return `k:${trade?.groupId || ''}:${trade?.fundCode || ''}:${trade?.type || ''}:${trade?.date || ''}:${trade?.share || ''}:${trade?.amount || ''}:${trade?.isAfter3pm ? 1 : 0}`;
+          };
+          const mergedPendingMap = new Map();
+          existingPending.forEach((trade) => {
+            if (!trade || !fundCodeSet.has(trade.fundCode)) return;
+            mergedPendingMap.set(keyOf(trade), trade);
+          });
+          incomingPending.forEach((trade) => {
+            if (!fundCodeSet.has(trade.fundCode)) return;
+            mergedPendingMap.set(keyOf(trade), trade);
+          });
+          const mergedPending = Array.from(mergedPendingMap.values());
+          setPendingTrades(mergedPending);
+        }
+
+        if (isPlainObject(data.dcaPlans)) {
+          const mergedDca = { ...migrateDcaPlansToScoped(currentDcaPlans) };
+          const incomingScoped = migrateDcaPlansToScoped(data.dcaPlans);
+          Object.keys(incomingScoped).forEach((scope) => {
+            mergedDca[scope] = {
+              ...(isPlainObject(mergedDca[scope]) ? mergedDca[scope] : {}),
+              ...(isPlainObject(incomingScoped[scope]) ? incomingScoped[scope] : {}),
+            };
+          });
+          setDcaPlans(mergedDca);
+          }
+        if (isPlainObject(data.customSettings)) {
+          try {
+            const currentCustomSettings = customSettings || {};
+            const mergedSettings = {
+              ...(isPlainObject(currentCustomSettings) ? currentCustomSettings : {}),
+              ...data.customSettings,
+            };
+            setCustomSettings(mergedSettings);
+            if (mergedSettings.localSortRules && Array.isArray(mergedSettings.localSortRules)) {
+              setSortRules(mergedSettings.localSortRules);
+            }
+            if (mergedSettings.localSortDisplayMode && SORT_DISPLAY_MODES.has(mergedSettings.localSortDisplayMode)) {
+              setPcSortDisplayMode(mergedSettings.localSortDisplayMode);
+              setMobileSortDisplayMode(mergedSettings.localSortDisplayMode);
+            } else {
+              if (mergedSettings.pcLocalSortDisplayMode && SORT_DISPLAY_MODES.has(mergedSettings.pcLocalSortDisplayMode)) {
+                setPcSortDisplayMode(mergedSettings.pcLocalSortDisplayMode);
+              }
+              if (mergedSettings.mobileLocalSortDisplayMode && SORT_DISPLAY_MODES.has(mergedSettings.mobileLocalSortDisplayMode)) {
+                setMobileSortDisplayMode(mergedSettings.mobileLocalSortDisplayMode);
+              }
+            }
+            if (typeof mergedSettings.pcContainerWidth === 'number' && Number.isFinite(mergedSettings.pcContainerWidth)) {
+              setContainerWidth(Math.min(2000, Math.max(600, mergedSettings.pcContainerWidth)));
+            }
+            if (typeof mergedSettings.showMarketIndexPc === 'boolean') setShowMarketIndexPc(mergedSettings.showMarketIndexPc);
+            if (typeof mergedSettings.showMarketIndexMobile === 'boolean') setShowMarketIndexMobile(mergedSettings.showMarketIndexMobile);
+            if (typeof mergedSettings.showGroupFundSearchPc === 'boolean') setShowGroupFundSearchPc(mergedSettings.showGroupFundSearchPc);
+            if (typeof mergedSettings.showGroupFundSearchMobile === 'boolean') setShowGroupFundSearchMobile(mergedSettings.showGroupFundSearchMobile);
+          } catch { }
+        }
+
+        if (isPlainObject(data.fundDailyEarnings)) {
+          try {
+            const incomingScoped = normalizeFundDailyEarningsScoped(data.fundDailyEarnings);
+            const currentScoped = normalizeFundDailyEarningsScoped(fundDailyEarnings);
+            const mergedDaily = { ...currentScoped };
+            Object.entries(incomingScoped).forEach(([scope, bucket]) => {
+              if (!isPlainObject(bucket)) return;
+              const existingBucket = isPlainObject(mergedDaily[scope]) ? mergedDaily[scope] : {};
+              const mergedBucket = { ...existingBucket };
+              Object.entries(bucket).forEach(([code, list]) => {
+                if (!Array.isArray(list)) return;
+                const existingList = Array.isArray(mergedBucket[code]) ? mergedBucket[code] : [];
+                const existingByDate = new Map(existingList.map(item => [item.date, item]));
+                list.forEach(item => {
+                  if (!item || !item.date || !Number.isFinite(item.earnings)) return;
+                  existingByDate.set(item.date, item);
+                });
+                mergedBucket[code] = Array.from(existingByDate.values())
+                  .sort((a, b) => a.date.localeCompare(b.date));
+              });
+              mergedDaily[scope] = mergedBucket;
+            });
+            setFundDailyEarnings(mergedDaily);
+          } catch { }
+        }
+
+        // 导入成功后，仅刷新新追加的基金
+        if (appendedCodes.length) {
+          // 这里需要确保 refreshAll 不会因为闭包问题覆盖掉刚刚合并好的 mergedFunds
+          // 我们直接传入所有代码执行一次全量刷新是最稳妥的，或者修改 refreshAll 支持增量更新
+          const allCodes = mergedFunds.map(f => f.code);
+          await refreshAll(allCodes);
+        }
+
+        setSuccessModal({ open: true, message: '导入成功' });
+        setSettingsOpen(false); // 导入成功自动关闭设置弹框
+        if (importFileRef.current) importFileRef.current.value = '';
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      setImportMsg('导入失败，请检查文件格式');
+      setTimeout(() => setImportMsg(''), 4000);
+      if (importFileRef.current) importFileRef.current.value = '';
+    }
+  };
+
   const isAnyModalOpen = useMemo(
     () =>
       portfolioEarningsOpen ||
@@ -8123,23 +8384,12 @@ export default function HomePage() {
             saveSettings={saveSettings}
             exportLocalData={exportLocalData}
             importFileRef={importFileRef}
-            setImportMsg={setImportMsg}
-            onImportSuccess={() => {
-              setSuccessModal({ open: true, message: '导入成功' });
-              setSettingsOpen(false);
-            }}
+            handleImportFileChange={handleImportFileChange}
             importMsg={importMsg}
             isMobile={isMobile}
             containerWidth={containerWidth}
             setContainerWidth={setContainerWidth}
             onResetContainerWidth={handleResetContainerWidth}
-            refreshAll={refreshAll}
-            applyViewMode={applyViewMode}
-            setFundTagRecords={setFundTagRecords}
-            setShowMarketIndexPc={setShowMarketIndexPc}
-            setShowMarketIndexMobile={setShowMarketIndexMobile}
-            setShowGroupFundSearchPc={setShowGroupFundSearchPc}
-            setShowGroupFundSearchMobile={setShowGroupFundSearchMobile}
             showMarketIndexPc={showMarketIndexPc}
             showMarketIndexMobile={showMarketIndexMobile}
             showGroupFundSearchPc={showGroupFundSearchPc}

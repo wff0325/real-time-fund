@@ -79,14 +79,22 @@ export default function FundDailyEarningsDetailModal({
         header: '收益率',
         cell: (info) => {
           const v = info.getValue();
+          const row = info.row?.original;
+          const earnings = Number(row?.earnings);
+          const baseCostAmount = Number(row?.baseCostAmount);
+          const derivedRate =
+            Number.isFinite(earnings) && Number.isFinite(baseCostAmount) && baseCostAmount > 0
+              ? (earnings / baseCostAmount) * 100
+              : null;
+          const rateValue = (v != null && Number.isFinite(v)) ? v : derivedRate;
           if (masked) return '***';
-          if (v == null || !Number.isFinite(v)) return '—';
-          const sign = v > 0 ? '+' : '';
-          const cls = v > 0 ? 'up' : v < 0 ? 'down' : '';
+          if (rateValue == null || !Number.isFinite(rateValue)) return '—';
+          const sign = rateValue > 0 ? '+' : '';
+          const cls = rateValue > 0 ? 'up' : rateValue < 0 ? 'down' : '';
           return (
             <span className={cls}>
               {sign}
-              {v.toFixed(2)}%
+              {rateValue.toFixed(2)}%
             </span>
           );
         },

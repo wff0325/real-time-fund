@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { isString } from 'lodash';
+import { storageStore } from '../stores';
 import { getQueryClient } from '../lib/get-query-client';
 import * as qk from '../lib/query-keys';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -148,17 +149,27 @@ function normalizeEastmoneyScriptUrl(url) {
 }
 
 /** 东方财富 F10 / FundArchives 等 JSONP（window.apidata），不做缓存；由 loadScript / fetchQuery 控制 staleTime */
-function runEastmoneyF10ScriptForApidata(url) {
+function runEastmoneyF10ScriptForApidata(url, timeoutMs = 10000) {
   return new Promise((resolve) => {
     const script = document.createElement('script');
     script.src = url;
     script.async = true;
 
+    let done = false;
     const cleanup = () => {
+      done = true;
+      if (timer) clearTimeout(timer);
       if (document.body.contains(script)) document.body.removeChild(script);
     };
 
+    const timer = setTimeout(() => {
+      if (done) return;
+      cleanup();
+      resolve({ ok: false, error: '请求超时' });
+    }, timeoutMs);
+
     script.onload = () => {
+      if (done) return;
       cleanup();
       let apidata;
       try {
@@ -170,6 +181,7 @@ function runEastmoneyF10ScriptForApidata(url) {
     };
 
     script.onerror = () => {
+      if (done) return;
       cleanup();
       resolve({ ok: false, error: '数据加载失败' });
     };
@@ -389,61 +401,57 @@ export const fetchSmartFundNetValue = async (code, startDate) => {
   return null;
 };
 
+export const fetchSmartFundNetValueBackward = async (code, startDate) => {
+  const today = nowInTz().startOf('day');
+  let current = toTz(startDate).startOf('day');
+  if (current.isAfter(today)) current = today;
+  for (let i = 0; i < 30; i++) {
+    const dateStr = current.format('YYYY-MM-DD');
+    const val = await fetchFundNetValue(code, dateStr);
+    if (val !== null) {
+      return { date: dateStr, value: val };
+    }
+    current = current.subtract(1, 'day');
+  }
+  return null;
+};
+
 export const fetchFundDataFallback = async (c) => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('无浏览器环境');
   }
   return new Promise(async (resolve, reject) => {
-    const searchCallbackName = `SuggestData_fallback_${Date.now()}`;
-    const searchUrl = `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=${encodeURIComponent(c)}&callback=${searchCallbackName}&_=${Date.now()}`;
-    let fundName = '';
     try {
-      await new Promise((resSearch, rejSearch) => {
-        window[searchCallbackName] = (data) => {
-          if (data && data.Datas && data.Datas.length > 0) {
-            const found = data.Datas.find(d => d.CODE === c);
-            if (found) {
-              fundName = found.NAME || found.SHORTNAME || '';
-            }
-          }
-          delete window[searchCallbackName];
-          resSearch();
-        };
-        const script = document.createElement('script');
-        script.src = searchUrl;
-        script.async = true;
-        script.onload = () => {
-          if (document.body.contains(script)) document.body.removeChild(script);
-        };
-        script.onerror = () => {
-          if (document.body.contains(script)) document.body.removeChild(script);
-          delete window[searchCallbackName];
-          rejSearch(new Error('搜索接口失败'));
-        };
-        document.body.appendChild(script);
-        setTimeout(() => {
-          if (window[searchCallbackName]) {
-            delete window[searchCallbackName];
-            resSearch();
-          }
-        }, 3000);
-      });
-    } catch (e) {
-    }
-    try {
-      // fallback 同样取最近两天净值，以补齐 lastNav（用于更精确的当日收益计算）
-      const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${c}&page=1&per=3&sdate=&edate=`;
-      const apidata = await loadScript(url);
-      const content = apidata?.content || '';
-      const navList = parseNetValuesFromLsjzContent(content);
-      const latest = navList.length > 0 ? navList[navList.length - 1] : null;
-      const previousNav = navList.length > 1 ? navList[navList.length - 2] : null;
-      const yM = computeYesterdayNavMetricsFromList(navList);
-      if (latest && latest.nav) {
-        const name = fundName || `未知基金(${c})`;
+      // 尝试并行获取 F10 数据和通过搜索接口获取基金名称
+      const f10Promise = (async () => {
+        const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${c}&page=1&per=3&sdate=&edate=`;
+        const apidata = await loadScript(url);
+        const content = apidata?.content || '';
+        const navList = parseNetValuesFromLsjzContent(content);
+        const latest = navList.length > 0 ? navList[navList.length - 1] : null;
+        const previousNav = navList.length > 1 ? navList[navList.length - 2] : null;
+        const yM = computeYesterdayNavMetricsFromList(navList);
+        return { latest, previousNav, yM };
+      })();
+
+      const namePromise = (async () => {
+        try {
+          // 通过搜索接口查询该代码对应的基金详情
+          const results = await searchFunds(c);
+          const found = results.find(item => item.CODE === c);
+          return found ? (found.NAME || found.SHORTNAME) : null;
+        } catch (e) {
+          return null;
+        }
+      })();
+
+      const [navResult, fundName] = await Promise.all([f10Promise, namePromise]);
+
+      if (navResult && navResult.latest && navResult.latest.nav) {
+        const { latest, previousNav, yM } = navResult;
         resolve({
           code: c,
-          name,
+          name: fundName || `基金(${c})`,
           dwjz: String(latest.nav),
           lastNav: previousNav ? String(previousNav.nav) : null,
           gsz: null,
@@ -454,6 +462,7 @@ export const fetchFundDataFallback = async (c) => {
           yesterdayZzl: yM.yesterdayZzl,
           yesterdayNavDelta: yM.yesterdayNavDelta,
           noValuation: true,
+          valuationSource: 'fallback',
           holdings: [],
           holdingsReportDate: null,
           holdingsIsLastQuarter: false
@@ -475,7 +484,7 @@ function fundDebugEnabled() {
     // 仅开发环境允许输出调试日志（避免生产环境污染控制台）
     if (typeof process !== 'undefined' && process?.env?.NODE_ENV === 'production') return false;
     if (typeof window === 'undefined') return false;
-    const v = window?.localStorage?.getItem(RTF_FUND_DEBUG_LS_KEY);
+    const v = storageStore.getItem(RTF_FUND_DEBUG_LS_KEY);
     return v === '1' || v === 'true';
   } catch (e) {
     return false;
@@ -662,7 +671,8 @@ export const fetchFundData = async (c) => {
           gsz: json.gsz,
           gztime: json.gztime,
           jzrq: json.jzrq,
-          gszzl: Number.isFinite(gszzlNum) ? gszzlNum : json.gszzl
+          gszzl: Number.isFinite(gszzlNum) ? gszzlNum : json.gszzl,
+          valuationSource: 'fundgz'
         };
         const lsjzPromise = new Promise((resolveT) => {
           const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=3&sdate=&edate=`;
@@ -828,7 +838,19 @@ export const fetchFundData = async (c) => {
               await new Promise((resQuote) => {
                 const scriptQuote = document.createElement('script');
                 scriptQuote.src = quoteUrl;
+                let quoteDone = false;
+                const cleanupQuote = () => {
+                  quoteDone = true;
+                  if (quoteTimer) clearTimeout(quoteTimer);
+                  if (document.body.contains(scriptQuote)) document.body.removeChild(scriptQuote);
+                };
+                const quoteTimer = setTimeout(() => {
+                  if (quoteDone) return;
+                  cleanupQuote();
+                  resQuote();
+                }, 10000);
                 scriptQuote.onload = () => {
+                  if (quoteDone) return;
                   needQuotes.forEach(({ h, tencentCode }) => {
                     const varName = getTencentVarName(tencentCode);
                     const dataStr = varName ? window[varName] : null;
@@ -841,11 +863,11 @@ export const fetchFundData = async (c) => {
                       }
                     }
                   });
-                  if (document.body.contains(scriptQuote)) document.body.removeChild(scriptQuote);
+                  cleanupQuote();
                   resQuote();
                 };
                 scriptQuote.onerror = () => {
-                  if (document.body.contains(scriptQuote)) document.body.removeChild(scriptQuote);
+                  cleanupQuote();
                   resQuote();
                 };
                 document.body.appendChild(scriptQuote);
@@ -915,36 +937,68 @@ export const fetchFundData = async (c) => {
 };
 
 export const searchFunds = async (val) => {
-  if (!val.trim()) return [];
+  const normalized = String(val || '').trim();
+  if (!normalized) return [];
   if (typeof window === 'undefined' || typeof document === 'undefined') return [];
-  const callbackName = `SuggestData_${Date.now()}`;
-  const url = `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=${encodeURIComponent(val)}&callback=${callbackName}&_=${Date.now()}`;
-  return new Promise((resolve, reject) => {
-    window[callbackName] = (data) => {
-      let results = [];
-      if (data && data.Datas) {
-        results = data.Datas.filter(d =>
-          d.CATEGORY === 700 ||
-          d.CATEGORY === '700' ||
-          d.CATEGORYDESC === '基金'
-        );
-      }
-      delete window[callbackName];
-      resolve(results);
-    };
-    const script = document.createElement('script');
-    script.src = url;
-    script.async = true;
-    script.onload = () => {
-      if (document.body.contains(script)) document.body.removeChild(script);
-    };
-    script.onerror = () => {
-      if (document.body.contains(script)) document.body.removeChild(script);
-      delete window[callbackName];
-      reject(new Error('搜索请求失败'));
-    };
-    document.body.appendChild(script);
-  });
+
+  const qc = getQueryClient();
+  try {
+    return await qc.fetchQuery({
+      queryKey: qk.fundSearch(normalized),
+      queryFn: async () => {
+        const callbackName = `SuggestData_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const url = `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=${encodeURIComponent(normalized)}&callback=${callbackName}&_=${Date.now()}`;
+
+        return new Promise((resolve, reject) => {
+          let done = false;
+          const cleanup = () => {
+            done = true;
+            if (timer) clearTimeout(timer);
+            if (document.body.contains(script)) document.body.removeChild(script);
+          };
+
+          const timer = setTimeout(() => {
+            if (done) return;
+            cleanup();
+            delete window[callbackName];
+            reject(new Error('搜索请求超时'));
+          }, 10000);
+
+          window[callbackName] = (data) => {
+            if (done) return;
+            let results = [];
+            if (data && data.Datas) {
+              results = data.Datas.filter(d =>
+                d.CATEGORY === 700 ||
+                d.CATEGORY === '700' ||
+                d.CATEGORYDESC === '基金'
+              );
+            }
+            cleanup();
+            delete window[callbackName];
+            resolve(results);
+          };
+
+          const script = document.createElement('script');
+          script.src = url;
+          script.async = true;
+          script.onload = () => {
+            // Callback usually handles cleanup, but onload is a backup
+          };
+          script.onerror = () => {
+            if (done) return;
+            cleanup();
+            delete window[callbackName];
+            reject(new Error('搜索请求失败'));
+          };
+          document.body.appendChild(script);
+        });
+      },
+      staleTime: ONE_DAY_MS,
+    });
+  } catch (e) {
+    return [];
+  }
 };
 
 export const fetchShanghaiIndexDate = async () => {
@@ -952,7 +1006,20 @@ export const fetchShanghaiIndexDate = async () => {
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = `https://qt.gtimg.cn/q=sh000001&_t=${Date.now()}`;
+    let done = false;
+    const cleanup = () => {
+      done = true;
+      if (timer) clearTimeout(timer);
+      if (document.body.contains(script)) document.body.removeChild(script);
+    };
+    const timer = setTimeout(() => {
+      if (done) return;
+      cleanup();
+      reject(new Error('数据请求超时'));
+    }, 10000);
+
     script.onload = () => {
+      if (done) return;
       const data = window.v_sh000001;
       let dateStr = null;
       if (data) {
@@ -961,11 +1028,12 @@ export const fetchShanghaiIndexDate = async () => {
           dateStr = parts[30].slice(0, 8);
         }
       }
-      if (document.body.contains(script)) document.body.removeChild(script);
+      cleanup();
       resolve(dateStr);
     };
     script.onerror = () => {
-      if (document.body.contains(script)) document.body.removeChild(script);
+      if (done) return;
+      cleanup();
       reject(new Error('指数数据加载失败'));
     };
     document.body.appendChild(script);
@@ -1069,7 +1137,20 @@ export const fetchMarketIndices = async () => {
     const script = document.createElement('script');
     const codes = MARKET_INDEX_KEYS.map((item) => item.code).join(',');
     script.src = `https://qt.gtimg.cn/q=${codes}&_t=${Date.now()}`;
+    let done = false;
+    const cleanup = () => {
+      done = true;
+      if (timer) clearTimeout(timer);
+      if (document.body.contains(script)) document.body.removeChild(script);
+    };
+    const timer = setTimeout(() => {
+      if (done) return;
+      cleanup();
+      reject(new Error('数据请求超时'));
+    }, 10000);
+
     script.onload = () => {
+      if (done) return;
       const list = MARKET_INDEX_KEYS.map(({ name: defaultName, varKey, code }) => {
         const raw = window[varKey];
         const isGlobal = code.startsWith('gz');
@@ -1077,11 +1158,12 @@ export const fetchMarketIndices = async () => {
         if (!parsed) return { name: defaultName, code: '', price: 0, change: 0, changePercent: 0 };
         return { ...parsed, name: defaultName, code: varKey.replace('v_', '') };
       });
-      if (document.body.contains(script)) document.body.removeChild(script);
+      cleanup();
       resolve(list);
     };
     script.onerror = () => {
-      if (document.body.contains(script)) document.body.removeChild(script);
+      if (done) return;
+      cleanup();
       reject(new Error('指数数据加载失败'));
     };
     document.body.appendChild(script);

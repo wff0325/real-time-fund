@@ -21,8 +21,8 @@ export default function RefreshButton({ refreshCycleStartRef, refreshMs, manualR
 
   return (
     <div
-      className="refresh-btn-wrap"
-      style={{ '--progress': refreshProgress }}
+      className={`refresh-btn-wrap ${refreshing ? 'is-refreshing' : ''}`}
+      style={{ '--progress': refreshing ? 0 : refreshProgress }}
       title={`刷新周期 ${Math.round(refreshMs / 1000)} 秒`}
     >
       <button

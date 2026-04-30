@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { storageStore } from '../stores';
 
-const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.1';
+const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.4';
 
 export default function Announcement() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const hasClosed = localStorage.getItem(ANNOUNCEMENT_KEY);
+    const hasClosed = storageStore.getItem(ANNOUNCEMENT_KEY);
     if (!hasClosed) {
       setIsVisible(true);
     }
@@ -18,15 +19,17 @@ export default function Announcement() {
   const handleClose = () => {
     // 清理历史 ANNOUNCEMENT_KEY
     const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('hasClosedAnnouncement_v') && key !== ANNOUNCEMENT_KEY) {
-        keysToRemove.push(key);
+    if (typeof window !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('hasClosedAnnouncement_v') && key !== ANNOUNCEMENT_KEY) {
+          keysToRemove.push(key);
+        }
       }
     }
-    keysToRemove.forEach((k) => localStorage.removeItem(k));
+    keysToRemove.forEach((k) => storageStore.removeItem(k));
 
-    localStorage.setItem(ANNOUNCEMENT_KEY, 'true');
+    storageStore.setItem(ANNOUNCEMENT_KEY, 'true');
     setIsVisible(false);
   };
 
@@ -75,12 +78,13 @@ export default function Announcement() {
               <span>公告</span>
             </div>
             <div style={{ color: 'var(--text)', lineHeight: '1.6', fontSize: '15px', overflowY: 'auto', minHeight: 0, flex: 1, paddingRight: '4px' }}>
-              <p>v1.3.1 更新内容如下：</p>
-              <p>1. 更换截图识别 ai 方案。</p>
-              <p>2. 修复分组新建、删除问题。</p>
-              <p>3. 修复移动端管理分组二次确认弹框层级问题。</p>
-              <p>4. 基金卡片、添加分组展示基金标签。</p>
-              <p>5. 定投弹框新增重置按钮。</p>
+              <p>v1.3.4 更新内容如下：</p>
+              <p>1. 新增自添加来表格列。</p>
+              <p>2. 新增基金标签排序。</p>
+              <p>3. 调整关联板块展示形式。</p>
+              <p>4. 调整刷新接口并发请求个数，尽量避免触发接口限速。</p>
+              <p>5. 修复收益计算问题。</p>
+              <p>6. 修复基金转换净值计算问题。</p>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>

@@ -33,7 +33,7 @@ using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
 -- 增量更新函数
-create or replace function public.update_user_config_partial(payload jsonb)
+create or replace function public.update_user_config_partial(payload jsonb, p_last_device_id text default null)
 returns void
 language plpgsql
 security definer
@@ -43,16 +43,17 @@ $$
 begin
 update public.user_configs
 set data = ((coalesce(data::jsonb, '{}'::jsonb) || payload)::json),
-    updated_at = now()
+    updated_at = now(),
+    last_device_id = coalesce(p_last_device_id, last_device_id)
 where user_id = auth.uid();
 end;
 $$;
 
-grant execute on function public.update_user_config_partial(jsonb) to authenticated;
-grant execute on function public.update_user_config_partial(jsonb) to service_role;
+grant execute on function public.update_user_config_partial(jsonb, text) to authenticated;
+grant execute on function public.update_user_config_partial(jsonb, text) to service_role;
 
 -- 开启实时订阅 Publication（必须，否则 Supabase Realtime 无法监听 user_configs 表变更）
-drop publication if exists supabase_realtime for table public.user_configs;
+drop publication if exists supabase_realtime;
 create publication supabase_realtime for table public.user_configs;
 
 -- v1.0.0 版本更新关联板块表

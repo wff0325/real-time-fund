@@ -98,7 +98,7 @@ import MineTab from './components/MineTab';
 import SearchFund from './components/SearchFund';
 import MyEarningsCalendarPage from './components/MyEarningsCalendarPage';
 import { useFundFuzzyMatcher } from './hooks/useFundFuzzyMatcher';
-import {useUserStore, clearAuthUser, setAuthUser, useStorageStore, storageStore, getFundCodesSignature} from './stores';
+import {useUserStore, clearAuthUser, setAuthUser, useStorageStore, storageStore, getFundCodesSignature, DEFAULT_SORT_RULES, SORT_DISPLAY_MODES} from './stores';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -150,7 +150,13 @@ export default function HomePage() {
     initHoldings, initGroupHoldings,
     initPendingTrades, initTransactions,
     initDcaPlans, initCustomSettings,
-    initFundDailyEarnings
+    initFundDailyEarnings,
+    sortBy, setSortBy,
+    sortOrder, setSortOrder,
+    pcSortDisplayMode, setPcSortDisplayMode,
+    mobileSortDisplayMode, setMobileSortDisplayMode,
+    sortRules, setSortRules,
+    initSort,
   } = useStorageStore();
   /** 基金标签（独立 localStorage 键 `tags`）：{ id, name, theme, fundCodes: string[] }[] */
   const [fundTagRecords, setFundTagRecords] = useState([]);
@@ -225,152 +231,15 @@ export default function HomePage() {
   const [groupManageOpen, setGroupManageOpen] = useState(false);
   const [addFundToGroupOpen, setAddFundToGroupOpen] = useState(false);
 
-  const DEFAULT_SORT_RULES = [
-    { id: 'default', label: '默认', enabled: true },
-    // 估值涨幅为原始名称，"涨跌幅"为别名
-    { id: 'yield', label: '估算涨幅', alias: '涨跌幅', enabled: true },
-    // 最新涨幅排序：默认隐藏
-    { id: 'yesterdayIncrease', label: '最新涨幅', enabled: false },
-    // 持仓金额排序：默认隐藏
-    { id: 'holdingAmount', label: '持仓金额', enabled: false },
-    { id: 'todayProfit', label: '当日收益', enabled: false },
-    { id: 'yesterdayProfit', label: '昨日收益', enabled: false },
-    { id: 'holdingDays', label: '持有天数', enabled: false },
-    { id: 'holding', label: '持有收益', enabled: true },
-    { id: 'estimateProfit', label: '估算收益', enabled: true },
-    { id: 'holdingCost', label: '持仓成本', enabled: false },
-    { id: 'last1Week', label: '近1周', enabled: false },
-    { id: 'last1Month', label: '近1月', enabled: false },
-    { id: 'last3Months', label: '近3月', enabled: false },
-    { id: 'last6Months', label: '近6月', enabled: false },
-    { id: 'last1Year', label: '近1年', enabled: false },
-    { id: 'tags', label: '基金标签', enabled: false },
-    { id: 'name', label: '基金名称', alias: '名称', enabled: true },
-  ];
-  const SORT_DISPLAY_MODES = new Set(['buttons', 'dropdown']);
-
-  // 排序状态
-  const [sortBy, setSortBy] = useState('default'); // default, name, yield, yesterdayIncrease, holding, holdingAmount, todayProfit
-  const [sortOrder, setSortOrder] = useState('desc'); // asc | desc
-  const [pcSortDisplayMode, setPcSortDisplayMode] = useState('buttons'); // buttons | dropdown
-  const [mobileSortDisplayMode, setMobileSortDisplayMode] = useState('buttons'); // buttons | dropdown
-  const [isSortLoaded, setIsSortLoaded] = useState(false);
-  const [sortRules, setSortRules] = useState(DEFAULT_SORT_RULES);
   const [sortSettingOpen, setSortSettingOpen] = useState(false);
 
+  // 调用 store 的 initSort，在 mount 时恢复持久化的排序偏好
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedSortBy = storageStore.getItem('localSortBy');
-      const savedSortOrder = storageStore.getItem('localSortOrder');
-      if (savedSortBy) setSortBy(savedSortBy);
-      if (savedSortOrder) setSortOrder(savedSortOrder);
-
-      // 1）优先从 customSettings.localSortRules 读取
-      // 2）兼容旧版独立 localSortRules 字段
-      let rulesFromSettings = null;
-      try {
-        const parsed = storageStore.getItem('customSettings', customSettings || {});
-        if (parsed) {
-          if (Array.isArray(parsed.localSortRules)) {
-            rulesFromSettings = parsed.localSortRules;
-          }
-          
-          let pcMode = 'buttons';
-          let mobileMode = 'buttons';
-
-          if (parsed && typeof parsed.localSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.localSortDisplayMode)) {
-            pcMode = parsed.localSortDisplayMode;
-            mobileMode = parsed.localSortDisplayMode;
-          } else {
-            if (parsed && typeof parsed.pcLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.pcLocalSortDisplayMode)) {
-              pcMode = parsed.pcLocalSortDisplayMode;
-            }
-            if (parsed && typeof parsed.mobileLocalSortDisplayMode === 'string' && SORT_DISPLAY_MODES.has(parsed.mobileLocalSortDisplayMode)) {
-              mobileMode = parsed.mobileLocalSortDisplayMode;
-            }
-          }
-
-          setPcSortDisplayMode(pcMode);
-          setMobileSortDisplayMode(mobileMode);
-        }
-      } catch {
-        // ignore
-      }
-
-      if (!rulesFromSettings) {
-        const parsed = storageStore.getItem('localSortRules');
-        if (parsed) {
-          try {
-            if (Array.isArray(parsed)) {
-              rulesFromSettings = parsed;
-            }
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      if (rulesFromSettings && rulesFromSettings.length) {
-        // 1）先按本地存储的顺序还原（包含 alias、enabled 等字段）
-        const defaultMap = new Map(
-          DEFAULT_SORT_RULES.map((rule) => [rule.id, rule])
-        );
-        const merged = [];
-
-        // 先遍历本地配置，保持用户自定义的顺序和别名/开关
-        for (const stored of rulesFromSettings) {
-          const base = defaultMap.get(stored.id);
-          if (!base) continue;
-          merged.push({
-            ...base,
-            // 只用本地的 enabled / alias 等个性化字段，基础 label 仍以内置为准
-            enabled:
-              typeof stored.enabled === "boolean"
-                ? stored.enabled
-                : base.enabled,
-            alias:
-              typeof stored.alias === "string" && stored.alias.trim()
-                ? stored.alias.trim()
-                : base.alias,
-          });
-        }
-
-        // 再把本次版本新增、但本地还没记录过的规则追加到末尾
-        DEFAULT_SORT_RULES.forEach((rule) => {
-          if (!merged.some((r) => r.id === rule.id)) {
-            merged.push(rule);
-          }
-        });
-
-        setSortRules(merged);
-      }
-
-      setIsSortLoaded(true);
+      initSort();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && isSortLoaded) {
-      storageStore.setItem('localSortBy', sortBy);
-      storageStore.setItem('localSortOrder', sortOrder);
-      try {
-        const parsed = customSettings || {};
-        const next = {
-          ...(parsed && typeof parsed === 'object' ? parsed : {}),
-          localSortRules: sortRules,
-          pcLocalSortDisplayMode: pcSortDisplayMode,
-          mobileLocalSortDisplayMode: mobileSortDisplayMode,
-        };
-        // 删除旧的字段以兼容历史数据
-        if ('localSortDisplayMode' in next) {
-          delete next.localSortDisplayMode;
-        }
-        setCustomSettings(next);
-      } catch {
-        // ignore
-      }
-    }
-  }, [sortBy, sortOrder, sortRules, pcSortDisplayMode, mobileSortDisplayMode, isSortLoaded]);
 
   // 当用户关闭某个排序规则时，如果当前 sortBy 不再可用，则自动切换到第一个启用的规则
   useEffect(() => {
@@ -8432,11 +8301,6 @@ export default function HomePage() {
             open={sortSettingOpen}
             onClose={() => setSortSettingOpen(false)}
             isMobile={isMobile}
-            rules={sortRules}
-            onChangeRules={setSortRules}
-            sortDisplayMode={isMobile ? mobileSortDisplayMode : pcSortDisplayMode}
-            onChangeSortDisplayMode={isMobile ? setMobileSortDisplayMode : setPcSortDisplayMode}
-            onResetRules={() => setSortRules(DEFAULT_SORT_RULES)}
           />
         )}
       </AnimatePresence>

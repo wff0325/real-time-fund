@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo, useLayoutEffect, useCallback, useTransition } from 'react';
+import { useEffect, useRef, useState, useMemo, useLayoutEffect, useCallback, useTransition, useDeferredValue } from 'react';
 import ScanButton from './components/ScanButton';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
@@ -308,6 +308,7 @@ export default function HomePage() {
 
   // 搜索相关状态
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedFunds, setSelectedFunds] = useState([]);
@@ -319,6 +320,7 @@ export default function HomePage() {
 
   // 分组内基金列表搜索（点击按钮后才应用）
   const [groupFundSearchTerm, setGroupFundSearchTerm] = useState('');
+  const deferredGroupFundSearchTerm = useDeferredValue(groupFundSearchTerm);
 
   // 动态计算 Navbar 和 FilterBar 高度
   const navbarRef = useRef(null);
@@ -1291,11 +1293,11 @@ export default function HomePage() {
   }, [scopedFunds, needsSortPeriodReturns]);
 
   // 过滤和排序后的基金列表（包含“列表搜索”过滤）
-  const displayFunds = useMemo(
+  const displayFundsRaw = useMemo(
     () => {
       let filtered = [...scopedFunds];
 
-      const q = (shouldShowGroupFundSearch ? (groupFundSearchTerm || '') : '').trim();
+      const q = (shouldShowGroupFundSearch ? (deferredGroupFundSearchTerm || '') : '').trim();
       if (q) {
         const qLower = q.toLowerCase();
         filtered = filtered.filter((f) => {
@@ -1515,8 +1517,10 @@ export default function HomePage() {
         return 0;
       });
     },
-    [scopedFunds, currentTab, groups, sortBy, sortOrder, holdingsForTabWithLinked, getHoldingProfitForTab, groupFundSearchTerm, shouldShowGroupFundSearch, currentFundDailyEarnings, sortPeriodReturnsByCode, todayStr, fundTagListsByCode],
+    [scopedFunds, currentTab, groups, sortBy, sortOrder, holdingsForTabWithLinked, getHoldingProfitForTab, deferredGroupFundSearchTerm, shouldShowGroupFundSearch, currentFundDailyEarnings, sortPeriodReturnsByCode, todayStr, fundTagListsByCode],
   );
+
+  const displayFunds = useDeferredValue(displayFundsRaw);
 
   const latestDailyByCode = useMemo(() => {
     const out = {};

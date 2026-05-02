@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo, useLayoutEffect, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo, useLayoutEffect, useCallback, useTransition } from 'react';
 import ScanButton from './components/ScanButton';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
@@ -225,6 +225,7 @@ export default function HomePage() {
   const [valuationSeries, setValuationSeries] = useState(() => (typeof window !== 'undefined' ? getAllValuationSeries() : {}));
   // 自选状态
   const [currentTab, setCurrentTab] = useState('all');
+  const [isPending, startTransition] = useTransition();
   const hasLocalTabInitRef = useRef(false);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupManageOpen, setGroupManageOpen] = useState(false);
@@ -424,7 +425,6 @@ export default function HomePage() {
   const todayStr = formatDate();
 
   const [isMobile, setIsMobile] = useState(false);
-  const [hoveredPcRowCode, setHoveredPcRowCode] = useState(null); // PC 列表行悬浮高亮
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -472,34 +472,6 @@ export default function HomePage() {
   }, [shouldShowMarketIndex]);
 
   const [isSyncing, setIsSyncing] = useState(false);
-
-  // 存储当前被划开的基金代码
-  const [swipedFundCode, setSwipedFundCode] = useState(null);
-
-  // 点击页面其他区域时收起删除按钮
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      // 检查点击事件是否来自删除按钮
-      // 如果点击的是 .swipe-action-bg 或其子元素，不执行收起逻辑
-      if (e.target.closest('.swipe-action-bg')) {
-        return;
-      }
-
-      if (swipedFundCode) {
-        setSwipedFundCode(null);
-      }
-    };
-
-    if (swipedFundCode) {
-      document.addEventListener('click', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [swipedFundCode]);
 
   // 检查交易日状态
   const checkTradingDay = async () => {
@@ -7093,7 +7065,7 @@ export default function HomePage() {
                         exit={{ opacity: 0, scale: 0.8 }}
                         key="portfolio-summary"
                         className={`tab ${currentTab === SUMMARY_TAB_ID ? 'active' : ''}`}
-                        onClick={() => setCurrentTab(SUMMARY_TAB_ID)}
+                        onClick={() => startTransition(() => setCurrentTab(SUMMARY_TAB_ID))}
                         transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 1 }}
                       >
                         汇总
@@ -7106,7 +7078,7 @@ export default function HomePage() {
                       exit={{ opacity: 0, scale: 0.8 }}
                       key="all"
                       className={`tab ${currentTab === 'all' ? 'active' : ''}`}
-                      onClick={() => setCurrentTab('all')}
+                      onClick={() => startTransition(() => setCurrentTab('all'))}
                       transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 1 }}
                     >
                       全部 ({funds.length})
@@ -7118,7 +7090,7 @@ export default function HomePage() {
                       exit={{ opacity: 0, scale: 0.8 }}
                       key="fav"
                       className={`tab ${currentTab === 'fav' ? 'active' : ''}`}
-                      onClick={() => setCurrentTab('fav')}
+                      onClick={() => startTransition(() => setCurrentTab('fav'))}
                       transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 1 }}
                     >
                       自选 ({favorites.size})
@@ -7131,7 +7103,7 @@ export default function HomePage() {
                         exit={{ opacity: 0, scale: 0.8 }}
                         key={g.id}
                         className={`tab ${currentTab === g.id ? 'active' : ''}`}
-                        onClick={() => setCurrentTab(g.id)}
+                        onClick={() => startTransition(() => setCurrentTab(g.id))}
                         transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 1 }}
                       >
                         {g.name} ({g.codes.length})
@@ -7214,8 +7186,10 @@ export default function HomePage() {
                     <Select
                       value={sortBy}
                       onValueChange={(nextSortBy) => {
-                        setSortBy(nextSortBy);
-                        if (nextSortBy !== sortBy) setSortOrder('desc');
+                        startTransition(() => {
+                          setSortBy(nextSortBy);
+                          if (nextSortBy !== sortBy) setSortOrder('desc');
+                        });
                       }}
                     >
                       <SelectTrigger
@@ -7234,7 +7208,11 @@ export default function HomePage() {
                     </Select>
                     <Select
                       value={sortOrder}
-                      onValueChange={(value) => setSortOrder(value)}
+                      onValueChange={(value) => {
+                        startTransition(() => {
+                          setSortOrder(value);
+                        });
+                      }}
                     >
                       <SelectTrigger
                         className="h-4 min-w-[84px] py-0 text-xs shadow-none"
@@ -7255,14 +7233,16 @@ export default function HomePage() {
                         key={s.id}
                         className={`chip ${sortBy === s.id ? 'active' : ''}`}
                         onClick={() => {
-                          if (sortBy === s.id) {
-                            // 同一按钮重复点击，切换升序/降序
-                            setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                          } else {
-                            // 切换到新的排序字段，默认用降序
-                            setSortBy(s.id);
-                            setSortOrder('desc');
-                          }
+                          startTransition(() => {
+                            if (sortBy === s.id) {
+                              // 同一按钮重复点击，切换升序/降序
+                              setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                            } else {
+                              // 切换到新的排序字段，默认用降序
+                              setSortBy(s.id);
+                              setSortOrder('desc');
+                            }
+                          });
                         }}
                         style={{ height: '28px', fontSize: '12px', padding: '0 10px', display: 'flex', alignItems: 'center', gap: 4 }}
                       >
@@ -7334,8 +7314,10 @@ export default function HomePage() {
                       <GroupAccountSummaryCard
                         isMobile={isMobile}
                         onActivate={() =>
-                          setCurrentTab(
-                            row.groupId === SUMMARY_SOURCE_GLOBAL ? 'all' : row.groupId
+                          startTransition(() =>
+                            setCurrentTab(
+                              row.groupId === SUMMARY_SOURCE_GLOBAL ? 'all' : row.groupId
+                            )
                           )
                         }
                         groupName={row.groupName}
@@ -7405,12 +7387,14 @@ export default function HomePage() {
                                 sortOrder={sortOrder}
                                 sortRules={sortRules}
                                 onSortChange={(id) => {
-                                  if (sortBy === id) {
-                                    setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                                  } else {
-                                    setSortBy(id);
-                                    setSortOrder('desc');
-                                  }
+                                  startTransition(() => {
+                                    if (sortBy === id) {
+                                      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                                    } else {
+                                      setSortBy(id);
+                                      setSortOrder('desc');
+                                    }
+                                  });
                                 }}
                                 onReorder={handleReorder}
                                 onRemoveFund={handleRemoveFundEntry}
@@ -7443,12 +7427,14 @@ export default function HomePage() {
                         sortOrder={sortOrder}
                         sortRules={sortRules}
                         onSortChange={(id) => {
-                          if (sortBy === id) {
-                            setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                          } else {
-                            setSortBy(id);
-                            setSortOrder('desc');
-                          }
+                          startTransition(() => {
+                            if (sortBy === id) {
+                              setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                            } else {
+                              setSortBy(id);
+                              setSortOrder('desc');
+                            }
+                          });
                         }}
                         stickyTop={navbarHeight + filterBarHeight + marketIndexAccordionHeight}
                         blockDrawerClose={!!fundDeleteConfirm || !!fundDeleteBulkConfirm}

@@ -100,6 +100,11 @@ import MineTab from './components/MineTab';
 import SearchFund from './components/SearchFund';
 import MyEarningsCalendarPage from './components/MyEarningsCalendarPage';
 import { useFundFuzzyMatcher } from './hooks/useFundFuzzyMatcher';
+import { useTheme } from './hooks/useTheme';
+import { useTradingDay } from './hooks/useTradingDay';
+import { useNavHeights } from './hooks/useNavHeights';
+import { useScanImport } from './hooks/useScanImport';
+import { useIsMobile } from './hooks/useIsMobile';
 import {useUserStore, clearAuthUser, setAuthUser, useStorageStore, storageStore, getFundCodesSignature, DEFAULT_SORT_RULES, SORT_DISPLAY_MODES} from './stores';
 
 dayjs.extend(utc);
@@ -131,6 +136,42 @@ import {
 } from './lib/fundHelpers';
 
 import GlobalToast from './components/GlobalToast';
+
+// --- Utility Functions ---
+const dedupeByCode = (list) => {
+  const seen = new Set();
+  return list.filter((f) => {
+    const c = f?.code;
+    if (!c || seen.has(c)) return false;
+    seen.add(c);
+    return true;
+  });
+};
+
+function normalizeCode(value) {
+  return String(value ?? '').trim();
+}
+
+function cleanCodeArray(input, allowedSet = null) {
+  const arr = Array.isArray(input) ? input : [];
+  const next = [];
+  const seen = new Set();
+  for (const v of arr) {
+    const code = normalizeCode(v);
+    if (!code) continue;
+    if (allowedSet && !allowedSet.has(code)) continue;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    next.push(code);
+  }
+  return next;
+}
+
+const normalizeNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
 
 export default function HomePage() {
   const {
@@ -325,66 +366,20 @@ export default function HomePage() {
   const [groupFundSearchTerm, setGroupFundSearchTerm] = useState('');
   const deferredGroupFundSearchTerm = useDeferredValue(groupFundSearchTerm);
 
-  // 动态计算 Navbar 和 FilterBar 高度
-  const navbarRef = useRef(null);
-  const filterBarRef = useRef(null);
+  // --- 主题管理（抽离到 useTheme）---
+  const { theme, showThemeTransition, setShowThemeTransition, handleThemeToggle } = useTheme();
+
+  // 动态计算 Navbar 和 FilterBar 高度（抽离到 useNavHeights）
+  // 注意：isMobile 在此处尚未声明，shouldShowMarketIndex 由 page.jsx 内独立 useEffect 处理
   const containerRef = useRef(null);
-  const [navbarHeight, setNavbarHeight] = useState(0);
-  const [filterBarHeight, setFilterBarHeight] = useState(0);
-  const [marketIndexAccordionHeight, setMarketIndexAccordionHeight] = useState(0);
-  // 主题初始固定为 dark，避免 SSR 与客户端首屏不一致导致 hydration 报错；真实偏好由 useLayoutEffect 在首帧前恢复
-  const [theme, setTheme] = useState('dark');
-  const [showThemeTransition, setShowThemeTransition] = useState(false);
-
-  const handleThemeToggle = useCallback(() => {
-    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
-    setShowThemeTransition(true);
-  }, []);
-
-  // 首帧前同步主题（与 layout 中脚本设置的 data-theme 一致），减少图标闪烁
-  useLayoutEffect(() => {
-    try {
-      const fromDom = document.documentElement.getAttribute('data-theme');
-      if (fromDom === 'light' || fromDom === 'dark') {
-        setTheme(fromDom);
-        return;
-      }
-      const fromStorage = storageStore.getItem('theme');
-      if (fromStorage === 'light' || fromStorage === 'dark') {
-        setTheme(fromStorage);
-        document.documentElement.setAttribute('data-theme', fromStorage);
-      }
-    } catch { }
-  }, []);
-
-  useEffect(() => {
-    let rafId = null;
-    const updateHeights = () => {
-      if (navbarRef.current) {
-        setNavbarHeight(navbarRef.current.offsetHeight);
-      }
-      if (filterBarRef.current) {
-        setFilterBarHeight(filterBarRef.current.offsetHeight);
-      }
-    };
-    // rAF 节流，避免 resize 事件以 60fps 频率触发 setState
-    const onResize = () => {
-      if (rafId) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        updateHeights();
-      });
-    };
-
-    // 初始延迟一下，确保渲染完成
-    const timer = setTimeout(updateHeights, 100);
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      clearTimeout(timer);
-      if (rafId) cancelAnimationFrame(rafId);
-    };
-  }, [groups, currentTab]); // groups 或 tab 变化可能导致 filterBar 高度变化
+  const {
+    navbarRef,
+    filterBarRef,
+    navbarHeight,
+    filterBarHeight,
+    marketIndexAccordionHeight,
+    setMarketIndexAccordionHeight,
+  } = useNavHeights({ groups, currentTab });
 
   const handleMobileSearchClick = (e) => {
     e?.preventDefault();
@@ -428,7 +423,6 @@ export default function HomePage() {
     transactionsRef.current = transactions;
   }, [holdings, groupHoldings, pendingTrades, transactions]);
 
-  const [isTradingDay, setIsTradingDay] = useState(true); // 默认为交易日，通过接口校正
   const tabsRef = useRef(null);
   const [fundDeleteConfirm, setFundDeleteConfirm] = useState(null); // { code, name }
   const [fundDeleteBulkConfirm, setFundDeleteBulkConfirm] = useState(null); // { codes: string[], count: number, groupId?: string, scope?: 'group' | 'global' }
@@ -439,27 +433,8 @@ export default function HomePage() {
 
   const todayStr = formatDate();
 
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      let rafId = null;
-      const checkMobile = () => setIsMobile(window.innerWidth <= 640);
-      const onResize = () => {
-        if (rafId) return;
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
-          checkMobile();
-        });
-      };
-      checkMobile();
-      window.addEventListener('resize', onResize);
-      return () => {
-        window.removeEventListener('resize', onResize);
-        if (rafId) cancelAnimationFrame(rafId);
-      };
-    }
-  }, []);
 
   const [mobileMainTab, setMobileMainTab] = useState('home');
   const [mobileBottomNavHidden, setMobileBottomNavHidden] = useState(false);
@@ -495,52 +470,12 @@ export default function HomePage() {
   // 当关闭大盘指数时，重置它的高度，避免 top/stickyTop 仍沿用旧值
   useEffect(() => {
     if (!shouldShowMarketIndex) setMarketIndexAccordionHeight(0);
-  }, [shouldShowMarketIndex]);
+  }, [shouldShowMarketIndex, setMarketIndexAccordionHeight]);
 
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 检查交易日状态
-  const checkTradingDay = async () => {
-    const now = nowInTz();
-    const isWeekend = now.day() === 0 || now.day() === 6;
-
-    // 周末直接判定为非交易日
-    if (isWeekend) {
-      setIsTradingDay(false);
-      return;
-    }
-
-    // 工作日通过上证指数判断是否为节假日
-    // 接口返回示例: v_sh000001="1~上证指数~...~20260205150000~..."
-    // 第30位是时间字段
-    try {
-      const dateStr = await fetchShanghaiIndexDate();
-      if (!dateStr) {
-        setIsTradingDay(!isWeekend);
-        return;
-      }
-      const currentStr = todayStr.replace(/-/g, '');
-      if (dateStr === currentStr) {
-        setIsTradingDay(true);
-      } else {
-        const minutes = now.hour() * 60 + now.minute();
-        if (minutes >= 9 * 60 + 30) {
-          setIsTradingDay(false);
-        } else {
-          setIsTradingDay(true);
-        }
-      }
-    } catch (e) {
-      setIsTradingDay(!isWeekend);
-    }
-  };
-
-  useEffect(() => {
-    checkTradingDay();
-    // 每30分钟检查一次
-    const timer = setInterval(checkTradingDay, 60000 * 30);
-    return () => clearInterval(timer);
-  }, []);
+  // 交易日检测（抽离到 useTradingDay）
+  const { isTradingDay } = useTradingDay();
 
   const activeGroupId =
     currentTab !== 'all' &&
@@ -2389,423 +2324,38 @@ export default function HomePage() {
   };
 
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
-  const [scanModalOpen, setScanModalOpen] = useState(false); // 扫描弹窗
-  const [scanConfirmModalOpen, setScanConfirmModalOpen] = useState(false); // 扫描确认弹窗
-  const [scannedFunds, setScannedFunds] = useState([]); // 扫描到的基金
-  const [selectedScannedCodes, setSelectedScannedCodes] = useState(new Set()); // 选中的扫描代码
-  const [isScanning, setIsScanning] = useState(false);
-  const [isScanImporting, setIsScanImporting] = useState(false);
-  const [scanImportProgress, setScanImportProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
-  const [scanProgress, setScanProgress] = useState({ stage: 'ocr', current: 0, total: 0 }); // stage: ocr | verify
-  const [isOcrScan, setIsOcrScan] = useState(false); // 是否为拍照/图片识别触发的弹框
-  const abortScanRef = useRef(false); // 终止扫描标记
-  const fileInputRef = useRef(null);
-  const ocrWorkerRef = useRef(null);
-  const { resolveFundCodeByFuzzy } = useFundFuzzyMatcher();
 
-  const handleScanClick = () => {
-    if (!user?.id) {
-      sonnerToast.error('该功能需登录后使用');
-      return;
-    }
-    setScanModalOpen(true);
-  };
-
-  const handleScanPick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  const cancelScan = () => {
-    abortScanRef.current = true;
-    setIsScanning(false);
-    setScanProgress({ stage: 'ocr', current: 0, total: 0 });
-    if (ocrWorkerRef.current) {
-      try {
-        ocrWorkerRef.current.terminate();
-      } catch (e) {}
-      ocrWorkerRef.current = null;
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const processFiles = async (files) => {
-    if (!files?.length) return;
-
-    setIsScanning(true);
-    setScanModalOpen(false); // 关闭选择弹窗
-    abortScanRef.current = false;
-    setScanProgress({ stage: 'ocr', current: 0, total: files.length });
-
-    try {
-      let worker = ocrWorkerRef.current;
-      if (!worker) {
-        const cdnBases = [
-          'https://01kjzb6fhx9f8rjstc8c21qadx.esa.staticdn.net/npm',
-          'https://fastly.jsdelivr.net/npm',
-          'https://cdn.jsdelivr.net/npm',
-        ];
-        const coreCandidates = [
-          'tesseract-core-simd-lstm.wasm.js',
-          'tesseract-core-lstm.wasm.js',
-        ];
-        let lastErr = null;
-        for (const base of cdnBases) {
-          for (const coreFile of coreCandidates) {
-            try {
-              worker = await createWorker('chi_sim+eng', 1, {
-                workerPath: `${base}/tesseract.js@v5.1.1/dist/worker.min.js`,
-                corePath: `${base}/tesseract.js-core@v5.1.1/${coreFile}`,
-              });
-              lastErr = null;
-              break;
-            } catch (e) {
-              lastErr = e;
-            }
-          }
-          if (!lastErr) break;
-        }
-        if (lastErr) throw lastErr;
-        ocrWorkerRef.current = worker;
-      }
-
-      const recognizeWithTimeout = async (file, ms) => {
-        let timer = null;
-        const timeout = new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error('OCR_TIMEOUT')), ms);
-        });
-        try {
-          return await Promise.race([worker.recognize(file), timeout]);
-        } finally {
-          if (timer) clearTimeout(timer);
-        }
-      };
-
-      const searchFundsWithTimeout = async (val, ms) => {
-        let timer = null;
-        const timeout = new Promise((resolve) => {
-          timer = setTimeout(() => resolve([]), ms);
-        });
-        try {
-          return await Promise.race([searchFunds(val), timeout]);
-        } catch (e) {
-          return [];
-        } finally {
-          if (timer) clearTimeout(timer);
-        }
-      };
-
-      const allFundsData = []; // 存储所有解析出的基金信息，格式为 [{fundCode, fundName, holdAmounts, holdGains}]
-      const addedFundCodes = new Set(); // 用于去重
-
-      for (let i = 0; i < files.length; i++) {
-        if (abortScanRef.current) break;
-
-        const f = files[i];
-        // 更新进度：正在处理第 i+1 张
-        setScanProgress(prev => ({ ...prev, current: i + 1 }));
-
-        let text = '';
-        try {
-          const res = await recognizeWithTimeout(f, 30000);
-          text = res?.data?.text || '';
-        } catch (e) {
-          if (String(e?.message || '').includes('OCR_TIMEOUT')) {
-            if (worker) {
-              try {
-                await worker.terminate();
-              } catch (err) {}
-              ocrWorkerRef.current = null;
-            }
-            throw e;
-          }
-          text = '';
-        }
-        // 提取到 text 内容，调用大模型 api 进行解析，获取基金数据(fundCode 可能为空)
-        const fundsResString = await parseFundTextWithLLM(text);
-        let fundsRes = null; // 格式为 [{"fundCode": "000001", "fundName": "浙商债券","holdAmounts": "99.99", "holdGains": "99.99"}]
-        try {
-          fundsRes = JSON.parse(fundsResString);
-        } catch (e) {
-          console.error(e);
-        }
-
-        // 处理大模型解析结果，根据 fundCode 去重
-        if (Array.isArray(fundsRes) && fundsRes.length > 0) {
-          fundsRes.forEach((fund) => {
-            const code = fund.fundCode || '';
-            const name = (fund.fundName || '').trim();
-            if (code && !addedFundCodes.has(code)) {
-              addedFundCodes.add(code);
-              allFundsData.push({
-                fundCode: code,
-                fundName: name,
-                holdAmounts: fund.holdAmounts || '',
-                holdGains: fund.holdGains || ''
-              });
-            } else if (!code && name) {
-              // fundCode 为空但有名称，后续需要通过名称搜索基金代码
-              allFundsData.push({
-                fundCode: '',
-                fundName: name,
-                holdAmounts: fund.holdAmounts || '',
-                holdGains: fund.holdGains || ''
-              });
-            }
-          });
-        }
-      }
-
-      if (abortScanRef.current) {
-        return;
-      }
-
-      // 处理没有基金代码但有名称的情况，通过名称搜索基金代码
-      const fundsWithoutCode = allFundsData.filter(f => !f.fundCode && f.fundName);
-      if (fundsWithoutCode.length > 0) {
-        setScanProgress({ stage: 'verify', current: 0, total: fundsWithoutCode.length });
-        for (let i = 0; i < fundsWithoutCode.length; i++) {
-          if (abortScanRef.current) break;
-          const fundItem = fundsWithoutCode[i];
-          setScanProgress(prev => ({ ...prev, current: i + 1 }));
-          try {
-            const list = await searchFundsWithTimeout(fundItem.fundName, 8000);
-            // 只有当搜索结果「有且仅有一条」时，才认为名称匹配是唯一且有效的
-            if (Array.isArray(list) && list.length === 1) {
-              const found = list[0];
-              if (found && found.CODE && !addedFundCodes.has(found.CODE)) {
-                addedFundCodes.add(found.CODE);
-                fundItem.fundCode = found.CODE;
-              }
-            } else {
-              // 使用 fuse.js 读取 Public 中的 allFunds 数据进行模糊匹配，补充搜索接口的不足
-              try {
-                const fuzzyCode = await resolveFundCodeByFuzzy(fundItem.fundName);
-                if (fuzzyCode && !addedFundCodes.has(fuzzyCode)) {
-                  addedFundCodes.add(fuzzyCode);
-                  fundItem.fundCode = fuzzyCode;
-                }
-              } catch (e) {
-              }
-            }
-          } catch (e) {
-          }
-        }
-      }
-
-      // 过滤出有基金代码的记录
-      const validFunds = allFundsData.filter(f => f.fundCode);
-      const codes = validFunds.map(f => f.fundCode).sort();
-      setScanProgress({ stage: 'verify', current: 0, total: codes.length });
-
-      const existingCodes = new Set(funds.map(f => f.code));
-      const results = [];
-      for (let i = 0; i < codes.length; i++) {
-        if (abortScanRef.current) break;
-        const code = codes[i];
-        const fundInfo = validFunds.find(f => f.fundCode === code);
-        setScanProgress(prev => ({ ...prev, current: i + 1 }));
-
-        let found = null;
-        try {
-          const list = await searchFundsWithTimeout(code, 8000);
-          found = Array.isArray(list) ? list.find(d => d.CODE === code) : null;
-        } catch (e) {
-          found = null;
-        }
-
-        const alreadyAdded = existingCodes.has(code);
-        const ok = !!found && !alreadyAdded;
-        results.push({
-          code,
-          name: found ? (found.NAME || found.SHORTNAME || '') : (fundInfo?.fundName || ''),
-          status: alreadyAdded ? 'added' : (ok ? 'ok' : 'invalid'),
-          holdAmounts: fundInfo?.holdAmounts || '',
-          holdGains: fundInfo?.holdGains || ''
-        });
-      }
-
-      if (abortScanRef.current) {
-        return;
-      }
-
-      setScannedFunds(results);
-      setSelectedScannedCodes(new Set(results.filter(r => r.status === 'ok').map(r => r.code)));
-      setIsOcrScan(true);
-      setScanConfirmModalOpen(true);
-    } catch (err) {
-      if (!abortScanRef.current) {
-        console.error('OCR Error:', err);
-        showToast('图片识别失败，请重试或更换更清晰的截图', 'error');
-      }
-    } finally {
-      setIsScanning(false);
-      setScanProgress({ stage: 'ocr', current: 0, total: 0 });
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleFilesUpload = (event) => {
-    processFiles(Array.from(event.target.files || []));
-  };
-
-  const handleFilesDrop = (files) => {
-    processFiles(files);
-  };
-
-  const toggleScannedCode = (code) => {
-    setSelectedScannedCodes(prev => {
-      const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
-      return next;
-    });
-  };
-
-  const confirmScanImport = async (targetGroupId = 'all', expandAfterAdd = true) => {
-    const rawCodes = Array.from(selectedScannedCodes);
-    const targetExists = (code) => {
-      if (!code) return false;
-      if (targetGroupId === 'all') return funds.some((f) => f.code === code);
-      if (targetGroupId === 'fav') return favorites?.has?.(code);
-      const g = groups.find((x) => x.id === targetGroupId);
-      return !!(g && Array.isArray(g.codes) && g.codes.includes(code));
-    };
-    const codes = rawCodes.filter((c) => !targetExists(c));
-    if (codes.length === 0) {
-      showToast('所选基金已在目标分组中', 'info');
-      return;
-    }
-    setScanConfirmModalOpen(false);
-    setIsScanImporting(true);
-    setScanImportProgress({ current: 0, total: codes.length, success: 0, failed: 0 });
-
-    const parseAmount = (val) => {
-      if (!val) return null;
-      const num = parseFloat(String(val).replace(/,/g, ''));
-      return isNaN(num) ? null : num;
-    };
-
-    try {
-      const newFunds = [];
-      const newHoldings = {};
-      let successCount = 0;
-      let failedCount = 0;
-
-      for (let i = 0; i < codes.length; i++) {
-        const code = codes[i];
-        setScanImportProgress(prev => ({ ...prev, current: i + 1 }));
-
-        const existed = funds.some(existing => existing.code === code);
-        try {
-          const data = existed ? (funds.find((f) => f.code === code) || null) : await fetchFundData(code);
-          if (!existed && data) newFunds.push(data);
-
-          const scannedFund = scannedFunds.find(f => f.code === code);
-          const holdAmounts = parseAmount(scannedFund?.holdAmounts);
-          const holdGains = parseAmount(scannedFund?.holdGains);
-          const dwjz = data?.dwjz || data?.gsz || 0;
-
-          if (!existed && holdAmounts !== null && dwjz > 0) {
-            const share = holdAmounts / dwjz;
-            const profit = holdGains !== null ? holdGains : 0;
-            const principal = holdAmounts - profit;
-            const cost = share > 0 ? principal / share : 0;
-            newHoldings[code] = {
-              share: Number(share.toFixed(2)),
-              cost: Number(cost.toFixed(4))
-            };
-          }
-
-          successCount++;
-          setScanImportProgress(prev => ({ ...prev, success: prev.success + 1 }));
-        } catch (e) {
-          failedCount++;
-          setScanImportProgress(prev => ({ ...prev, failed: prev.failed + 1 }));
-        }
-      }
-
-      const newCodesSet = new Set(newFunds.map((f) => f.code));
-      const allSelectedSet = new Set(codes);
-
-      if (newFunds.length > 0) {
-        setFunds(prev => dedupeByCode([...newFunds, ...prev]));
-
-        if (Object.keys(newHoldings).length > 0) {
-          setHoldings(prev => {
-            const next = { ...prev, ...newHoldings };
-            return next;
-          });
-        }
-
-        const nextSeries = {};
-        newFunds.forEach(u => {
-          if (u?.code != null && !u.noValuation && Number.isFinite(Number(u.gsz))) {
-            nextSeries[u.code] = recordValuation(u.code, { gsz: u.gsz, gztime: u.gztime });
-          }
-        });
-        if (Object.keys(nextSeries).length > 0) setValuationSeries(prev => ({ ...prev, ...nextSeries }));
-
-        if (!expandAfterAdd) {
-          // 用户关闭“添加后展开详情”：将新添加基金的卡片和业绩走势都标记为收起
-          setCollapsedCodes(prev => {
-            const next = new Set(prev);
-            newCodesSet.forEach((code) => next.add(code));
-            return next;
-          });
-          setCollapsedTrends(prev => {
-            const next = new Set(prev);
-            newCodesSet.forEach((code) => next.add(code));
-            return next;
-          });
-        }
-      }
-
-      // 无论是否新增 funds，都允许把已存在基金加入到目标分组/自选
-      if (targetGroupId === 'fav') {
-        setFavorites(prev => {
-          const next = new Set(prev);
-          codes.map(normalizeCode).filter(Boolean).forEach(code => next.add(code));
-          return next;
-        });
-        setCurrentTab('fav');
-      } else if (targetGroupId && targetGroupId !== 'all') {
-        setGroups(prev => {
-          return prev.map(g => {
-            if (g.id === targetGroupId) {
-              return {
-                ...g,
-                codes: Array.from(new Set([...(g.codes || []), ...codes]))
-              };
-            }
-            return g;
-          });
-        });
-        setCurrentTab(targetGroupId);
-      } else {
-        setCurrentTab('all');
-      }
-
-      if (successCount > 0) {
-        setSuccessModal({ open: true, message: `成功导入 ${successCount} 个基金` });
-      } else if (allSelectedSet.size > 0 && failedCount === 0) {
-        setSuccessModal({ open: true, message: '所选基金已在目标分组中' });
-      } else {
-        showToast('未能导入任何基金', 'info');
-      }
-    } catch (e) {
-      showToast('导入失败', 'error');
-    } finally {
-      setIsScanImporting(false);
-      setScanImportProgress({ current: 0, total: 0, success: 0, failed: 0 });
-      setScannedFunds([]);
-      setSelectedScannedCodes(new Set());
-    }
-  };
+  // OCR 扫描导入（抽离到 useScanImport）
+  const {
+    scanModalOpen, setScanModalOpen,
+    scanConfirmModalOpen, setScanConfirmModalOpen,
+    scannedFunds,
+    selectedScannedCodes,
+    isScanning,
+    isScanImporting,
+    scanImportProgress,
+    scanProgress,
+    isOcrScan,
+    fileInputRef,
+    handleScanClick,
+    handleScanPick,
+    cancelScan,
+    handleFilesUpload,
+    handleFilesDrop,
+    toggleScannedCode,
+    confirmScanImport,
+  } = useScanImport({
+    setCurrentTab,
+    setValuationSeries,
+    setSuccessModal,
+    showToast,
+    normalizeCode,
+    dedupeByCode,
+  });
 
   const [cloudConfigModal, setCloudConfigModal] = useState({ open: false, userId: null });
   const syncDebounceRef = useRef(null);
+
   const lastSyncedRef = useRef('');
   const skipSyncRef = useRef(isSupabaseConfigured);
   const userIdRef = useRef(null);
@@ -3698,16 +3248,7 @@ export default function HomePage() {
     }
   };
 
-  // 按 code 去重，保留第一次出现的项，避免列表重复
-  const dedupeByCode = (list) => {
-    const seen = new Set();
-    return list.filter((f) => {
-      const c = f?.code;
-      if (!c || seen.has(c)) return false;
-      seen.add(c);
-      return true;
-    });
-  };
+
 
   useEffect(() => {
     let cancelled = false;
@@ -3857,13 +3398,7 @@ export default function HomePage() {
     } catch { }
   }, [currentTab]);
 
-  // 主题同步到 document 并持久化
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    try {
-      storageStore.setItem('theme', theme);
-    } catch { }
-  }, [theme]);
+  // 主题同步：已由 useTheme hook 内部的 useEffect 处理，此处无需重复
 
   // 初始化认证状态监听
   useEffect(() => {
@@ -5322,29 +4857,7 @@ export default function HomePage() {
   const importFileRef = useRef(null);
   const [importMsg, setImportMsg] = useState('');
 
-  function normalizeCode(value) {
-    return String(value ?? '').trim();
-  }
 
-  function cleanCodeArray(input, allowedSet = null) {
-    const arr = Array.isArray(input) ? input : [];
-    const next = [];
-    const seen = new Set();
-    for (const v of arr) {
-      const code = normalizeCode(v);
-      if (!code) continue;
-      if (allowedSet && !allowedSet.has(code)) continue;
-      if (seen.has(code)) continue;
-      seen.add(code);
-      next.push(code);
-    }
-    return next;
-  }
-  const normalizeNumber = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    const num = Number(value);
-    return Number.isFinite(num) ? num : null;
-  };
   const normalizeFundDailyEarningsScoped = (source) => {
     if (!isPlainObject(source)) return {};
     const values = Object.values(source);
@@ -7069,7 +6582,6 @@ export default function HomePage() {
           <UserMenu
             user={user}
             userAvatar={userAvatar}
-            isMobile={isMobile}
             navbarHeight={navbarHeight}
             lastSyncTime={lastSyncTime}
             isSyncing={isSyncing}
@@ -7086,7 +6598,6 @@ export default function HomePage() {
         <MarketIndexAccordion
           navbarHeight={navbarHeight}
           onHeightChange={setMarketIndexAccordionHeight}
-          isMobile={isMobile}
           onCustomSettingsChange={triggerCustomSettingsSync}
           refreshing={refreshing}
         />
@@ -7366,7 +6877,6 @@ export default function HomePage() {
                       }}
                     >
                       <GroupAccountSummaryCard
-                        isMobile={isMobile}
                         onActivate={() =>
                           startTransition(() =>
                             setCurrentTab(
@@ -7792,7 +7302,6 @@ export default function HomePage() {
         onOpenChange={setPortfolioEarningsOpen}
         series={portfolioDailySeries}
         masked={maskAmounts}
-        isMobile={isMobile}
         onGoHome={() => {
           setPortfolioEarningsOpen(false);
           setMobileMainTab('home');
@@ -8125,7 +7634,6 @@ export default function HomePage() {
           <FundTagsEditDialog
             open={fundTagsEdit.open}
             onOpenChange={(open) => setFundTagsEdit((s) => ({ ...s, open }))}
-            isMobile={isMobile}
             fundCode={fundTagsEdit.code ?? undefined}
             fundName={fundTagsEdit.name}
             tags={fundTagsEdit.tags}
@@ -8281,7 +7789,6 @@ export default function HomePage() {
             importFileRef={importFileRef}
             handleImportFileChange={handleImportFileChange}
             importMsg={importMsg}
-            isMobile={isMobile}
             containerWidth={containerWidth}
             setContainerWidth={setContainerWidth}
             onResetContainerWidth={handleResetContainerWidth}
@@ -8313,7 +7820,6 @@ export default function HomePage() {
               setLoginModalOpen(false);
               setLoginInitialError('');
             }}
-            isMobile={isMobile}
             showToast={showToast}
             isExplicitLoginRef={isExplicitLoginRef}
             initialError={loginInitialError}
@@ -8326,7 +7832,6 @@ export default function HomePage() {
           <SortSettingModal
             open={sortSettingOpen}
             onClose={() => setSortSettingOpen(false)}
-            isMobile={isMobile}
           />
         )}
       </AnimatePresence>

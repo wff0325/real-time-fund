@@ -1,4 +1,5 @@
 "use client";
+import { useIsMobile } from '@/app/hooks/useIsMobile';
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, Reorder, useDragControls } from "framer-motion";
@@ -16,7 +17,6 @@ import { CloseIcon, DragIcon, ResetIcon, SettingsIcon } from "./Icons";
 import ConfirmModal from "./ConfirmModal";
 
 function SortSettingReorderItem({
-  isMobile,
   item,
   editingId,
   editingAlias,
@@ -27,6 +27,7 @@ function SortSettingReorderItem({
   handleToggle,
   setIsReordering,
 }) {
+  const isMobile = useIsMobile();
   const dragControls = useDragControls();
 
   return (
@@ -196,11 +197,9 @@ function SortSettingReorderItem({
  * @param {() => void} props.onClose - 关闭回调
  * @param {boolean} props.isMobile - 是否为移动端（由上层传入）
  */
-export default function SortSettingModal({
-  open,
-  onClose,
-  isMobile,
-}) {
+export default function SortSettingModal({open,
+  onClose}) {
+  const isMobile = useIsMobile();
   const {
     sortRules,
     setSortRules,
@@ -465,7 +464,6 @@ export default function SortSettingModal({
               .map((item) => (
                 <SortSettingReorderItem
                   key={item.id}
-                  isMobile={isMobile}
                   item={item}
                   editingId={editingId}
                   editingAlias={editingAlias}

@@ -1,4 +1,5 @@
 'use client';
+import { useIsMobile } from '@/app/hooks/useIsMobile';
 
 import { useEffect, useState, useRef } from 'react';
 import {
@@ -191,13 +192,11 @@ function IndexCard({ item }) {
 // 默认展示：上证指数、深证成指、创业板指
 const DEFAULT_SELECTED_CODES = ['sh000001', 'sz399001', 'sz399006'];
 
-export default function MarketIndexAccordion({
-  navbarHeight = 0,
+export default function MarketIndexAccordion({navbarHeight = 0,
   onHeightChange,
-  isMobile,
   onCustomSettingsChange,
-  refreshing = false,
-}) {
+  refreshing = false}) {
+  const isMobile = useIsMobile();
   const [indices, setIndices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openValue, setOpenValue] = useState('');
@@ -486,7 +485,6 @@ export default function MarketIndexAccordion({
       <MarketSettingModal
         open={settingOpen}
         onClose={() => setSettingOpen(false)}
-        isMobile={isMobile}
         indices={indices}
         selectedCodes={selectedCodes}
         onChangeSelected={setSelectedCodes}

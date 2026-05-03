@@ -1,4 +1,5 @@
 'use client';
+import { useIsMobile } from '@/app/hooks/useIsMobile';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -28,7 +29,7 @@ export default function FundDailyEarningsDetailModal({
   title = '收益明细',
   masked = false,
 }) {
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
   const [visibleCount, setVisibleCount] = useState(30);
   const scrollRef = useRef(null);
 

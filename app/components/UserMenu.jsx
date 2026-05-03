@@ -1,4 +1,5 @@
 'use client';
+import { useIsMobile } from '@/app/hooks/useIsMobile';
 
 import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
@@ -7,10 +8,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import ConfirmModal from './ConfirmModal';
 import { CalendarIcon, LoginIcon, LogoutIcon, SettingsIcon, UserIcon } from './Icons';
 
-export default function UserMenu({
-  user,
+export default function UserMenu({user,
   userAvatar,
-  isMobile,
   navbarHeight,
   lastSyncTime,
   isSyncing,
@@ -19,8 +18,8 @@ export default function UserMenu({
   onOpenPortfolioEarnings,
   onOpenLogin,
   onLogout,
-  onLogoutConfirmOpenChange,
-}) {
+  onLogoutConfirmOpenChange}) {
+  const isMobile = useIsMobile();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const userMenuRef = useRef(null);

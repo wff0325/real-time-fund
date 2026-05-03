@@ -8,6 +8,7 @@ import timezone from 'dayjs/plugin/timezone';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import { isNumber, isString } from 'lodash';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Stat } from './Common';
 import FundTrendChart from './FundTrendChart';
 import FundIntradayChart from './FundIntradayChart';
@@ -606,7 +607,16 @@ export default function FundCard({
           )}
           {hasHoldingAmount && (
             <TabsContent value="earnings" className="mt-3 outline-none">
-              <FundDailyEarnings series={displayDailyEarningsSeries} theme={theme} masked={masked} />
+              {displayDailyEarningsSeries.length > 0 ? (
+                <FundDailyEarnings series={displayDailyEarningsSeries} theme={theme} masked={masked} />
+              ) : (
+                <Empty className="py-8 border-none bg-transparent">
+                  <EmptyHeader>
+                    <EmptyTitle>暂无收益数据</EmptyTitle>
+                    <EmptyDescription>该基金暂无历史收益记录</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
             </TabsContent>
           )}
           <TabsContent value="trend" className="mt-3 outline-none">
@@ -725,7 +735,16 @@ export default function FundCard({
                     transition={{ duration: 0.3, ease: 'easeInOut' }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <FundDailyEarnings series={displayDailyEarningsSeries} theme={theme} masked={masked} />
+                    {displayDailyEarningsSeries.length > 0 ? (
+                      <FundDailyEarnings series={displayDailyEarningsSeries} theme={theme} masked={masked} />
+                    ) : (
+                      <Empty className="py-6 border-none bg-transparent">
+                        <EmptyHeader>
+                          <EmptyTitle className="text-sm">暂无收益数据</EmptyTitle>
+                          <EmptyDescription className="text-xs">该基金暂无历史收益记录</EmptyDescription>
+                        </EmptyHeader>
+                      </Empty>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

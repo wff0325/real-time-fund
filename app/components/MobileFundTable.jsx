@@ -1779,8 +1779,10 @@ export default function MobileFundTable({
           const cls = value > 0 ? 'up' : value < 0 ? 'down' : '';
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
-              <span className={cls} style={{ fontWeight: 700 }}>
-                {info.getValue() ?? '—'}
+              <span className={cls} style={{ display: 'block', width: '100%', fontWeight: 700 }}>
+                <FitText maxFontSize={14} minFontSize={10}>
+                  {info.getValue() ?? '—'}
+                </FitText>
               </span>
               <span className="muted" style={{ fontSize: '10px' }}>{displayDate}</span>
             </div>

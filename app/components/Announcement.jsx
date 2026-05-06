@@ -78,13 +78,11 @@ export default function Announcement() {
               <span>公告</span>
             </div>
             <div style={{ color: 'var(--text)', lineHeight: '1.6', fontSize: '15px', overflowY: 'auto', minHeight: 0, flex: 1, paddingRight: '4px' }}>
-              <p>v1.3.4 更新内容如下：</p>
-              <p>1. 新增自添加来表格列。</p>
-              <p>2. 新增基金标签排序。</p>
-              <p>3. 调整关联板块展示形式。</p>
-              <p>4. 调整刷新接口并发请求个数，尽量避免触发接口限速。</p>
-              <p>5. 修复收益计算问题。</p>
-              <p>6. 修复基金转换净值计算问题。</p>
+              <p>v1.3.5 更新内容如下：</p>
+              <p>1. 新增设备同步乐观锁，避免因设备同步失败导致数据丢失。</p>
+              <p>2. 新增连续涨跌标识。</p>
+              <p>3. 调截图识别允许覆盖已添加数据的持仓金额。</p>
+              <p>4. 移动端rem适配。</p>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>

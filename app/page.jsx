@@ -7790,7 +7790,7 @@ export default function HomePage() {
       <AnimatePresence>
         {deviceConflictModal.open && (
           <ConfirmModal
-            onClose={() => {
+            onCancel={() => {
               setDeviceConflictModal({ ...deviceConflictModal, open: false });
               skipSyncRef.current = false;
               refreshCycleStartRef.current = Date.now();

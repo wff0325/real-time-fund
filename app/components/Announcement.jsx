@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageStore } from '../stores';
 
-const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.4';
+const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.5';
 
 export default function Announcement() {
   const [isVisible, setIsVisible] = useState(false);

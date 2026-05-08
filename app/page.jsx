@@ -1379,7 +1379,7 @@ export default function HomePage() {
             const hasEstimatePercent = hasTodayEstimate && estimateChangeValue != null;
             const hasHoldingPercent = holdingProfitPercentValue != null;
             const fallbackEstimateProfitPercentValue = hasEstimatePercent || hasHoldingPercent ? (hasEstimatePercent ? estimateChangeValue : 0) + (hasHoldingPercent ? holdingProfitPercentValue : 0) : null;
-            
+
             return fallbackEstimateProfitPercentValue != null && principal > 0 ? principal * (fallbackEstimateProfitPercentValue / 100) : null;
           };
           const valA = getEstimateProfitValue(a);
@@ -3490,7 +3490,7 @@ export default function HomePage() {
     if (!isSupabaseConfigured || !user?.id) return;
     const deviceId = deviceIdRef.current;
     if (!deviceId) return; // 确保设备ID已初始化
-    
+
     const channel = supabase
       .channel(`user-configs-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_configs', filter: `last_device_id=neq.${deviceId}` }, async (payload) => {
@@ -3734,33 +3734,33 @@ export default function HomePage() {
       }, refreshMs);
       return;
     }
-    
+
     // 【步骤 1】重入锁检查：防止多个刷新任务同时运行导致状态混乱
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
 
-    // 【步骤 2】参数归一化：去重并缓存当前本地存储中的基金代码，用于判断基金是否已被用户删除
+    // 【步骤 2】用于判断基金是否已被用户删除
     const uniqueCodes = Array.from(new Set(codes));
-    let cachedStoredFundCodes = new Set();
-    let cachedStoredFundsByCode = new Map();
-    try {
-      const arr = storageStore.getItem('funds', []);
-      if (Array.isArray(arr)) {
-        cachedStoredFundCodes = new Set(arr.map((x) => x?.code).filter(Boolean));
-        cachedStoredFundsByCode = new Map(arr.filter((x) => x?.code).map((x) => [x.code, x]));
-      }
-    } catch (e) {
-      console.warn('读取缓存基金列表失败', e);
-    }
 
     const fundCodeStillInStorage = (code) => {
       if (!code) return false;
-      return cachedStoredFundCodes.has(code);
+      try {
+        const currentFunds = storageStore.getItem('funds', []);
+        return currentFunds.some(f => f.code === code);
+      } catch (e) {
+        return false;
+      }
     };
+
     const getStoredFundSnapshot = (code) => {
       if (!code) return null;
-      return cachedStoredFundsByCode.get(code) || null;
+      try {
+        const currentFunds = storageStore.getItem('funds', []);
+        return currentFunds.find(f => f.code === code) || null;
+      } catch (e) {
+        return null;
+      }
     };
 
     try {
@@ -3889,8 +3889,15 @@ export default function HomePage() {
 
         if (!data || !fundCodeStillInStorage(c)) return;
 
-        // 如果估值接口本轮失败（回退到 fallback），且本地已有旧数据，则保留旧数据不覆盖。
-        if (data.valuationSource === 'fallback' && getStoredFundSnapshot(c)) return;
+        const oldData = getStoredFundSnapshot(c);
+        // 如果估值接口本轮失败（回退到 fallback），说明盘中估值（gsz）获取失败。
+        // 为了防止前端估值变为空白，我们将本地旧数据的 gsz 等估值字段保留下来，但依然让最新的持仓和历史净值覆盖上去。
+        if (data.valuationSource === 'fallback' && oldData) {
+          data.gsz = oldData.gsz;
+          data.gszzl = oldData.gszzl;
+          data.gztime = oldData.gztime;
+          data.valuationSource = oldData.valuationSource; // 维持原有来源标识
+        }
 
         updated.push(data);
 
@@ -4068,7 +4075,6 @@ export default function HomePage() {
             next[scope] = { ...next[scope], ...bucket };
           }
           for (const code of uniqueCodes) {
-            if (!cachedStoredFundCodes.has(code)) {
               Object.keys(next).forEach(s => {
                 if (next[s] && next[s][code]) {
                   const nb = { ...next[s] };
@@ -4076,7 +4082,6 @@ export default function HomePage() {
                   next[s] = nb;
                 }
               });
-            }
           }
           return next;
         });
@@ -5793,7 +5798,7 @@ export default function HomePage() {
       }
 
       storageHelper.setItem('localUpdatedAt', now);
-      
+
       if (forceTakeover) {
         lastSyncedRef.current = getComparablePayload(dataToSync);
       }

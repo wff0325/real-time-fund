@@ -1033,7 +1033,7 @@ export default function PcFundTable({
           );
         },
         size: 300,
-        minSize: 140,
+        minSize: 280,
         enablePinning: true,
         cell: (info) => (
           <FundNameCell
@@ -1878,7 +1878,12 @@ export default function PcFundTable({
     const style = {
       width: `${column.getSize()}px`,
     };
-    if (!isPinned) return style;
+    if (!isPinned) {
+      return {
+        ...style,
+        zIndex: isHeader ? 1 : 0,
+      };
+    }
 
     const isLeft = isPinned === 'left';
     const isRight = isPinned === 'right';
@@ -2037,6 +2042,7 @@ export default function PcFundTable({
         .table-header-row-scroll,
         .table-row-scroll {
           display: flex !important;
+          align-items: stretch !important; /* 让每个单元格撑满行高 */
           width: fit-content !important;
           min-width: 100%;
           gap: 0 !important; /* Reset gap because we control width explicitly */
@@ -2044,6 +2050,8 @@ export default function PcFundTable({
 
         .table-header-cell,
         .table-cell {
+          display: flex !important;
+          align-items: center; /* 保持单元格内容垂直居中 */
           flex-shrink: 0;
           box-sizing: border-box;
           padding-left: 8px;

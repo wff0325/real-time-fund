@@ -7350,7 +7350,7 @@ export default function HomePage() {
             if (isMobile) {
               setTutorialDrawerOpen(true);
             } else {
-              window.open('https://jcle26f8aw.feishu.cn/docx/Qis6d6ntFoaTOZxPVlUckVIpn8c', '_blank');
+              window.open('https://www.yuque.com/u267605/ookgim/im06q8tembbld6im?singleDoc', '_blank');
             }
           }}
           onFeedback={() => {

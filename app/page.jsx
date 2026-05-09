@@ -86,8 +86,6 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { recordValuation, getAllValuationSeries, clearFund } from './lib/valuationTimeseries';
 import {
   DAILY_EARNINGS_SCOPE_ALL,
-  recordDailyEarnings,
-  clearDailyEarnings,
   aggregatePortfolioDailyEarnings,
 } from './lib/dailyEarnings';
 import { loadHolidaysForYears, isTradingDay as isDateTradingDay } from './lib/tradingCalendar';
@@ -1902,7 +1900,6 @@ export default function HomePage() {
 
       try {
         const earningsScope = gid || DAILY_EARNINGS_SCOPE_ALL;
-        clearDailyEarnings(code, earningsScope);
         setFundDailyEarnings((prev) => {
           if (!isPlainObject(prev) || !isPlainObject(prev[earningsScope]) || !(code in prev[earningsScope])) return prev;
           const next = { ...prev, [earningsScope]: { ...prev[earningsScope] } };
@@ -3032,7 +3029,6 @@ export default function HomePage() {
       });
 
       try {
-        for (const c of codeSet) clearDailyEarnings(c, gid);
         setFundDailyEarnings((prev) => {
           if (!isPlainObject(prev) || !isPlainObject(prev[gid])) return prev;
           let changed = false;
@@ -3096,7 +3092,6 @@ export default function HomePage() {
       return nextScoped;
     });
     try {
-      clearDailyEarnings(code, groupId);
       setFundDailyEarnings((prev) => {
         if (!isPlainObject(prev) || !isPlainObject(prev[groupId]) || !(code in prev[groupId])) return prev;
         const next = { ...prev, [groupId]: { ...prev[groupId] } };
@@ -3174,7 +3169,6 @@ export default function HomePage() {
       return nextScoped;
     });
     try {
-      for (const c of set) clearDailyEarnings(c, groupId);
       setFundDailyEarnings((prev) => {
         if (!isPlainObject(prev) || !isPlainObject(prev[groupId])) return prev;
         const bucket = prev[groupId];
@@ -4076,15 +4070,6 @@ export default function HomePage() {
           for (const [scope, bucket] of Object.entries(dailyChanges)) {
             next[scope] = { ...next[scope], ...bucket };
           }
-          for (const code of uniqueCodes) {
-              Object.keys(next).forEach(s => {
-                if (next[s] && next[s][code]) {
-                  const nb = { ...next[s] };
-                  delete nb[code];
-                  next[s] = nb;
-                }
-              });
-          }
           return next;
         });
       }
@@ -4551,7 +4536,6 @@ export default function HomePage() {
 
     // 同步删除该基金的每日收益数据
     try {
-      clearDailyEarnings(removeCode);
       setFundDailyEarnings(prev => {
         if (!isPlainObject(prev)) return prev;
         let changed = false;
@@ -4752,9 +4736,6 @@ export default function HomePage() {
     });
 
     try {
-      for (const c of set) {
-        clearDailyEarnings(c);
-      }
       setFundDailyEarnings((prev) => {
         if (!isPlainObject(prev)) return prev;
         const next = { ...prev };

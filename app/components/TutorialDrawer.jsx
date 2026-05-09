@@ -19,6 +19,7 @@ export default function TutorialDrawer({ open, onOpenChange }) {
             title="使用帮助"
             frameBorder={0}
             allowFullScreen
+            sandbox="allow-scripts allow-same-origin"
           />
         </div>
       </DrawerContent>

@@ -1,16 +1,16 @@
 'use client';
+import { useIsMobile } from '@/app/hooks/useIsMobile';
 
 import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import Image from 'next/image';
 import { AnimatePresence, motion } from 'framer-motion';
 import ConfirmModal from './ConfirmModal';
+import { HelpCircle } from 'lucide-react';
 import { CalendarIcon, LoginIcon, LogoutIcon, SettingsIcon, UserIcon } from './Icons';
 
-export default function UserMenu({
-  user,
+export default function UserMenu({user,
   userAvatar,
-  isMobile,
   navbarHeight,
   lastSyncTime,
   isSyncing,
@@ -20,7 +20,8 @@ export default function UserMenu({
   onOpenLogin,
   onLogout,
   onLogoutConfirmOpenChange,
-}) {
+  onTutorial}) {
+  const isMobile = useIsMobile();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const userMenuRef = useRef(null);
@@ -113,6 +114,7 @@ export default function UserMenu({
                   </div>
                   <div className="user-menu-divider" />
                   {!isMobile && (
+                    <>
                     <button
                       className="user-menu-item"
                       onClick={() => {
@@ -123,6 +125,17 @@ export default function UserMenu({
                       <CalendarIcon width="16" height="16" />
                       <span>我的收益</span>
                     </button>
+                    <button
+                      className="user-menu-item"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        onTutorial?.();
+                      }}
+                    >
+                      <HelpCircle width="16" height="16" />
+                      <span>使用帮助</span>
+                    </button>
+                    </>
                   )}
                   <button
                     className="user-menu-item"
@@ -178,6 +191,7 @@ export default function UserMenu({
                     <span>登录</span>
                   </button>
                   {!isMobile && (
+                    <>
                     <button
                       className="user-menu-item"
                       onClick={() => {
@@ -188,6 +202,17 @@ export default function UserMenu({
                       <CalendarIcon width="16" height="16" />
                       <span>我的收益</span>
                     </button>
+                    <button
+                      className="user-menu-item"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        onTutorial?.();
+                      }}
+                    >
+                      <HelpCircle width="16" height="16" />
+                      <span>使用帮助</span>
+                    </button>
+                    </>
                   )}
                   <button
                     className="user-menu-item"

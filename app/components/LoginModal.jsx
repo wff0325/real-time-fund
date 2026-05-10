@@ -1,4 +1,5 @@
 'use client';
+import { useIsMobile } from '@/app/hooks/useIsMobile';
 
 import Image from 'next/image';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
@@ -7,13 +8,11 @@ import { MailIcon } from './Icons';
 import githubImg from "../assets/github.svg";
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
-export default function LoginModal({
-  onClose,
-  isMobile,
+export default function LoginModal({onClose,
   showToast,
   isExplicitLoginRef,
-  initialError = ''
-}) {
+  initialError = ''}) {
+  const isMobile = useIsMobile();
   const [loginEmail, setLoginEmail] = useState('');
   const [loginOtp, setLoginOtp] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);

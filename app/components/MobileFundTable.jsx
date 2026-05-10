@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import ReactDOM from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -30,6 +31,7 @@ import MobileSettingModal from './MobileSettingModal';
 import MoveGroupModal from './MoveGroupModal';
 import SuccessModal from './SuccessModal';
 import { ArrowUpToLineIcon, CloseIcon, DragIcon, FolderPlusIcon, LinkIcon, PencilIcon, SettingsIcon, StarIcon, TrashIcon } from './Icons';
+import { ConsecutiveTrendBadge } from './Common';
 import { fetchFundPeriodReturns, fetchRelatedSectors, fetchRelatedSectorLiveQuote } from '@/app/api/fund';
 import { storageStore } from '../stores';
 import { asyncPool } from '@/app/lib/asyncHelper';
@@ -353,6 +355,7 @@ export default function MobileFundTable({
   onFundCardDrawerOpenChange,
   onMobileSettingModalOpenChange,
   onFundTagsClick,
+  fundExtraDataByCode = {},
 }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editSelectedCodes, setEditSelectedCodes] = useState(() => new Set());
@@ -706,6 +709,9 @@ export default function MobileFundTable({
 
   const tableContainerRef = useRef(null);
   const portalHeaderRef = useRef(null);
+  /** 窗口虚拟列表锚点：用于 scrollMargin（.mobile-fund-table-scroll 仅横向滚动，纵向为整页滚动） */
+  const virtualScrollAnchorRef = useRef(null);
+  const [virtualScrollMargin, setVirtualScrollMargin] = useState(0);
   const [tableContainerWidth, setTableContainerWidth] = useState(0);
   const [isScrolled, setIsScrolled] = useState(false);
   const [showPortalHeader, setShowPortalHeader] = useState(false);
@@ -1174,6 +1180,7 @@ export default function MobileFundTable({
                   <LinkIcon width="14" height="14" />
                 </span>
               ) : null}
+              <ConsecutiveTrendBadge trend={fundExtraDataByCode?.[code]?.consecutiveTrend} />
               {info.getValue() ?? '—'}
             </span>
             {holdingAmountDisplay ? (
@@ -1270,6 +1277,7 @@ export default function MobileFundTable({
                 <LinkIcon width="14" height="14" />
               </span>
             ) : null}
+            <ConsecutiveTrendBadge trend={fundExtraDataByCode?.[code]?.consecutiveTrend} />
             {info.getValue() ?? '—'}
           </span>
           {holdingAmountDisplay ? (
@@ -1775,8 +1783,10 @@ export default function MobileFundTable({
           const cls = value > 0 ? 'up' : value < 0 ? 'down' : '';
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
-              <span className={cls} style={{ fontWeight: 700 }}>
-                {info.getValue() ?? '—'}
+              <span className={cls} style={{ display: 'block', width: '100%', fontWeight: 700 }}>
+                <FitText maxFontSize={14} minFontSize={10}>
+                  {info.getValue() ?? '—'}
+                </FitText>
               </span>
               <span className="muted" style={{ fontSize: '10px' }}>{displayDate}</span>
             </div>
@@ -1798,8 +1808,10 @@ export default function MobileFundTable({
           const hasText = text != null && text !== '—';
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
-              <span className={cls} style={{ fontWeight: 700 }}>
-                {text ?? '—'}
+              <span className={cls} style={{ display: 'block', width: '100%', fontWeight: 700 }}>
+                <FitText maxFontSize={14} minFontSize={10}>
+                  {text ?? '—'}
+                </FitText>
               </span>
               {hasText && displayTime && displayTime !== '-' ? (
                 <span className="muted" style={{ fontSize: '10px' }}>{displayTime}</span>
@@ -2057,6 +2069,38 @@ export default function MobileFundTable({
   });
 
   const headerGroup = table.getHeaderGroups()[0];
+  const tableRows = table.getRowModel().rows;
+  const enableVirtualization = data.length > 40;
+  const rowVirtualizer = useWindowVirtualizer({
+    count: tableRows.length,
+    estimateSize: () => 52,
+    measureElement: (el) => el.getBoundingClientRect().height,
+    overscan: 8,
+    scrollMargin: virtualScrollMargin,
+    enabled: enableVirtualization,
+  });
+
+  useLayoutEffect(() => {
+    if (!enableVirtualization) return;
+    const el = virtualScrollAnchorRef.current;
+    if (!el) return;
+    const update = () => {
+      setVirtualScrollMargin(el.getBoundingClientRect().top + window.scrollY);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [enableVirtualization, tableRows.length, stickyTop]);
+
+  useEffect(() => {
+    if (!enableVirtualization) return;
+    rowVirtualizer.measure();
+  }, [enableVirtualization, tableRows.length, rowVirtualizer]);
 
   const snapPositionsRef = useRef([]);
   const scrollEndTimerRef = useRef(null);
@@ -2226,6 +2270,76 @@ export default function MobileFundTable({
     )
   }
 
+  const renderMobileRow = (row, index) => (
+    <div
+      className="table-row"
+      style={{
+        background: index % 2 === 0 ? 'var(--bg)' : 'var(--table-row-alt-bg)',
+        position: 'relative',
+        zIndex: 1,
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        touchAction: isEditMode ? 'auto' : 'pan-x pan-y',
+        ...(mobileGridLayout.gridTemplateColumns ? { gridTemplateColumns: mobileGridLayout.gridTemplateColumns } : {}),
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      onPointerDown={(e) => {
+        if (sortBy !== 'default' || isEditMode) return;
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+        const c = row.original?.code;
+        if (!c) return;
+        editLongPressRef.current.startX = e.clientX;
+        editLongPressRef.current.startY = e.clientY;
+        clearEditLongPressTimer();
+        editLongPressRef.current.timer = setTimeout(() => {
+          editLongPressRef.current.timer = null;
+          try {
+            const sel = typeof window !== 'undefined' && window.getSelection?.();
+            if (sel?.removeAllRanges) sel.removeAllRanges();
+          } catch { /* empty */ }
+          setIsEditMode(true);
+          const linked = !!row.original?.isHoldingLinked;
+          setEditSelectedCodes(linked ? new Set() : new Set([c]));
+        }, 550);
+      }}
+      onPointerMove={(e) => {
+        if (!editLongPressRef.current.timer) return;
+        const dx = Math.abs(e.clientX - editLongPressRef.current.startX);
+        const dy = Math.abs(e.clientY - editLongPressRef.current.startY);
+        if (dx > 12 || dy > 12) clearEditLongPressTimer();
+      }}
+      onPointerUp={clearEditLongPressTimer}
+      onPointerCancel={clearEditLongPressTimer}
+    >
+      {row.getVisibleCells().map((cell, cellIndex) => {
+        const columnId = cell.column.id;
+        const pinClass = getPinClass(columnId, false);
+        const alignClass = getAlignClass(columnId);
+        const cellClassName = cell.column.columnDef.meta?.cellClassName || '';
+        const isLastColumn = cellIndex === row.getVisibleCells().length - 1;
+        const style = isLastColumn ? {paddingRight: LAST_COLUMN_EXTRA} : {};
+        if (cellIndex  === 0) {
+          if (index % 2 !== 0) {
+            style.background = 'var(--table-row-alt-bg)';
+          }else {
+            style.background = 'var(--bg)';
+          }
+        }
+        return (
+          <div
+            key={cell.id}
+            className={`table-cell ${alignClass} ${cellClassName} ${pinClass}`}
+            style={style}
+          >
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const renderContent = (onlyShowHeader) => {
     if (onlyShowHeader) {
       return (
@@ -2248,7 +2362,63 @@ export default function MobileFundTable({
         >
           {renderTableHeader()}
 
-          {!onlyShowHeader && (
+          {!onlyShowHeader && enableVirtualization ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            >
+              <SortableContext
+                items={data.map((item) => item.code)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div
+                  ref={virtualScrollAnchorRef}
+                  className="mobile-fund-table-body-virtual"
+                  style={{ position: 'relative', width: '100%' }}
+                >
+                  <div
+                    style={{
+                      height: rowVirtualizer.getTotalSize(),
+                      position: 'relative',
+                      width: '100%',
+                    }}
+                  >
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const row = tableRows[virtualRow.index];
+                      if (!row) return null;
+                      return (
+                        <div
+                          key={row.original.code || row.id}
+                          data-index={virtualRow.index}
+                          ref={rowVirtualizer.measureElement}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${virtualRow.start - rowVirtualizer.options.scrollMargin}px)`,
+                            zIndex: activeId === row.original.code ? 9999 : 1,
+                          }}
+                        >
+                          <SortableRow
+                            row={row}
+                            isTableDragging={!!activeId}
+                            disabled={sortBy !== 'default' || !isEditMode}
+                          >
+                            {() => renderMobileRow(row, virtualRow.index)}
+                          </SortableRow>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </SortableContext>
+            </DndContext>
+          ) : !onlyShowHeader ? (
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -2262,89 +2432,20 @@ export default function MobileFundTable({
                 strategy={verticalListSortingStrategy}
               >
                 <AnimatePresence mode="popLayout">
-                  {table.getRowModel().rows.map((row, index) => (
+                  {tableRows.map((row, index) => (
                     <SortableRow
                       key={row.original.code || row.id}
                       row={row}
                       isTableDragging={!!activeId}
                       disabled={sortBy !== 'default' || !isEditMode}
                     >
-                      {() => (
-                        <div
-                          className="table-row"
-                          style={{
-                            background: index % 2 === 0 ? 'var(--bg)' : 'var(--table-row-alt-bg)',
-                            position: 'relative',
-                            zIndex: 1,
-                            WebkitUserSelect: 'none',
-                            userSelect: 'none',
-                            WebkitTouchCallout: 'none',
-                            touchAction: isEditMode ? 'auto' : 'pan-x pan-y',
-                            ...(mobileGridLayout.gridTemplateColumns ? { gridTemplateColumns: mobileGridLayout.gridTemplateColumns } : {}),
-                          }}
-                          onContextMenu={(e) => e.preventDefault()}
-                          onDragStart={(e) => e.preventDefault()}
-                          onPointerDown={(e) => {
-                            if (sortBy !== 'default' || isEditMode) return;
-                            if (e.button !== 0 && e.pointerType === 'mouse') return;
-                            const c = row.original?.code;
-                            if (!c) return;
-                            editLongPressRef.current.startX = e.clientX;
-                            editLongPressRef.current.startY = e.clientY;
-                            clearEditLongPressTimer();
-                            editLongPressRef.current.timer = setTimeout(() => {
-                              editLongPressRef.current.timer = null;
-                              try {
-                                const sel = typeof window !== 'undefined' && window.getSelection?.();
-                                if (sel?.removeAllRanges) sel.removeAllRanges();
-                              } catch { /* empty */ }
-                              setIsEditMode(true);
-                              const linked = !!row.original?.isHoldingLinked;
-                              setEditSelectedCodes(linked ? new Set() : new Set([c]));
-                            }, 550);
-                          }}
-                          onPointerMove={(e) => {
-                            if (!editLongPressRef.current.timer) return;
-                            const dx = Math.abs(e.clientX - editLongPressRef.current.startX);
-                            const dy = Math.abs(e.clientY - editLongPressRef.current.startY);
-                            if (dx > 12 || dy > 12) clearEditLongPressTimer();
-                          }}
-                          onPointerUp={clearEditLongPressTimer}
-                          onPointerCancel={clearEditLongPressTimer}
-                        >
-                          {row.getVisibleCells().map((cell, cellIndex) => {
-                            const columnId = cell.column.id;
-                            const pinClass = getPinClass(columnId, false);
-                            const alignClass = getAlignClass(columnId);
-                            const cellClassName = cell.column.columnDef.meta?.cellClassName || '';
-                            const isLastColumn = cellIndex === row.getVisibleCells().length - 1;
-                            const style = isLastColumn ? {paddingRight: LAST_COLUMN_EXTRA} : {};
-                            if (cellIndex  === 0) {
-                              if (index % 2 !== 0) {
-                                style.background = 'var(--table-row-alt-bg)';
-                              }else {
-                                style.background = 'var(--bg)';
-                              }
-                            }
-                            return (
-                              <div
-                                key={cell.id}
-                                className={`table-cell ${alignClass} ${cellClassName} ${pinClass}`}
-                                style={style}
-                              >
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                      {() => renderMobileRow(row, index)}
                     </SortableRow>
                   ))}
                 </AnimatePresence>
               </SortableContext>
             </DndContext>
-
-          )}
+          ) : null}
         </div>
 
         {table.getRowModel().rows.length === 0 && !onlyShowHeader && (

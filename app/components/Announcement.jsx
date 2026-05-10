@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { storageStore } from '../stores';
 
-const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.4';
+const ANNOUNCEMENT_KEY = 'hasClosedAnnouncement_v1.3.6';
 
 export default function Announcement() {
   const [isVisible, setIsVisible] = useState(false);
@@ -78,13 +78,12 @@ export default function Announcement() {
               <span>公告</span>
             </div>
             <div style={{ color: 'var(--text)', lineHeight: '1.6', fontSize: '15px', overflowY: 'auto', minHeight: 0, flex: 1, paddingRight: '4px' }}>
-              <p>v1.3.4 更新内容如下：</p>
-              <p>1. 新增自添加来表格列。</p>
-              <p>2. 新增基金标签排序。</p>
-              <p>3. 调整关联板块展示形式。</p>
-              <p>4. 调整刷新接口并发请求个数，尽量避免触发接口限速。</p>
-              <p>5. 修复收益计算问题。</p>
-              <p>6. 修复基金转换净值计算问题。</p>
+              <p>v1.3.6 更新内容如下：</p>
+              <p>1. PC端表格个性化设置新增固定列选择。</p>
+              <p>2. 移动端新增长列表虚拟滚动。</p>
+              <p>3. 修复PC端虚拟滚动引发的排序问题。</p>
+              <p>4. 修复PC端表格横向滚动遮挡问题。</p>
+              <p>5. 修复最新净值数据显示问题。</p>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
